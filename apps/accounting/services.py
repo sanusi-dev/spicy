@@ -438,73 +438,64 @@ def post_refund_gl(return_order):
 
 @transaction.atomic
 def post_cash_variance_gl(closing):
-    """Post a JournalEntry for a closing entry's short/excess variance.
+    """Post a JournalEntry for a closing entry's per-mode short/excess variances.
 
-    Only posts when the account matching the variance sign is configured;
-    otherwise the variance stays visible on the close with no posting.
+    Each drawer's difference posts to that mode's own mapped account (cash or
+    bank), netting against the over/short accounts. Only posts when the account
+    matching each variance sign is configured; otherwise the variance stays
+    visible on the close with no posting.
     """
     from apps.staff.models import POSClosingEntry
 
-    if closing.status != POSClosingEntry.SUBMITTED or not closing.total_short_excess:
+    if closing.status != POSClosingEntry.SUBMITTED:
         return None
     settings = Restaurant.load()
     if settings is None:
         return None
-    variance = closing.total_short_excess
-    if variance < 0:
-        account = settings.cash_shortage_account
-        label = "The cash shortage account"
-    else:
-        account = settings.cash_over_short_account
-        label = "The cash over-short account"
-    if account is None:
-        return None  # no automatic posting when the matching account is unconfigured
-    account = _resolve_required_account(account, label=label)
-
-    from apps.payments.models import ModeOfPayment
-
-    cash_mode = (
-        ModeOfPayment.objects.filter(
-            type=ModeOfPayment.TYPE_CASH,
-            enabled=True,
-            gl_mapping__isnull=False,
-        )
-        .select_related("gl_mapping")
-        .first()
-    )
-    if cash_mode is None:
-        raise ValidationError("No enabled cash payment mode with a GL mapping is configured.")
-    cash_account = _resolve_payment_account(cash_mode)
+    mode_legs = []
+    total_short = Decimal("0")
+    total_over = Decimal("0")
+    for cp in closing.closing_payments.select_related("mode_of_payment").all():
+        difference = cp.difference
+        if not difference:
+            continue
+        mode_account = _resolve_payment_account(cp.mode_of_payment)
+        if difference > 0:
+            mode_legs.append({"account": mode_account, "debit": difference, "remarks": "Cash excess"})
+            total_over += difference
+        else:
+            mode_legs.append({"account": mode_account, "credit": -difference, "remarks": "Cash shortage"})
+            total_short += -difference
+    if not mode_legs:
+        return None
+    if total_short:
+        if settings.cash_shortage_account is None:
+            return None
+        shortage_account = _resolve_required_account(settings.cash_shortage_account, label="The cash shortage account")
+    if total_over:
+        if settings.cash_over_short_account is None:
+            return None
+        over_account = _resolve_required_account(settings.cash_over_short_account, label="The cash over-short account")
 
     journal = JournalEntry.objects.create(
         voucher_type=JournalEntry.JOURNAL,
         posting_date=closing.posting_date,
         remark=f"Cash variance for closing entry #{closing.pk}",
     )
-    if variance < 0:
+    if total_short:
         JournalEntryAccount.objects.create(
             journal_entry=journal,
-            account=account,
-            debit=abs(variance),
+            account=shortage_account,
+            debit=total_short,
             remarks="Cash shortage",
         )
+    for leg in mode_legs:
+        JournalEntryAccount.objects.create(journal_entry=journal, **leg)
+    if total_over:
         JournalEntryAccount.objects.create(
             journal_entry=journal,
-            account=cash_account,
-            credit=abs(variance),
-            remarks="Cash shortage",
-        )
-    else:
-        JournalEntryAccount.objects.create(
-            journal_entry=journal,
-            account=cash_account,
-            debit=variance,
-            remarks="Cash excess",
-        )
-        JournalEntryAccount.objects.create(
-            journal_entry=journal,
-            account=account,
-            credit=variance,
+            account=over_account,
+            credit=total_over,
             remarks="Cash excess",
         )
     journal.submit()

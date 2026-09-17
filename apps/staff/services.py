@@ -248,7 +248,7 @@ def submit_closing_entry(closing, actor=None):
     opening.period_end_date = locked.period_end_date
     opening.save(update_fields=["closing_entry", "period_end_date", "updated_at"])
 
-    if locked.total_short_excess:
+    if locked.total_short_excess or any(cp.difference for cp in closing_payments):
         from apps.accounting.services import post_cash_variance_gl
 
         journal = post_cash_variance_gl(locked)

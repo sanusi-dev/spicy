@@ -46,7 +46,7 @@ Backoffice `closing_entry_create()` locks the open shift to prevent duplicate cl
 8. Stores closing differences as `closing_amount - expected_amount`.
 9. Applies the variance approval gate: when the absolute `total_short_excess` exceeds `Restaurant.variance_approval_threshold`, a non-empty `variance_note` and a Manager/Admin actor are required.
 10. Submits the closing and links it to the opening.
-11. Posts the cash variance: when `total_short_excess != 0` and the account matching the variance sign (`cash_shortage_account` or `cash_over_short_account`) is configured, `accounting.services.post_cash_variance_gl` creates and submits a balanced JournalEntry (shortage → Dr shortage / Cr cash; excess → Dr cash / Cr over-short) linked via `POSClosingEntry.variance_journal_entry`. Unconfigured accounts skip posting but the variance stays visible.
+11. Posts the cash variance: when any `ClosingPayment.difference` is non-zero and the account matching each variance sign (`cash_shortage_account` / `cash_over_short_account`) is configured, `accounting.services.post_cash_variance_gl` creates and submits a balanced JournalEntry with one leg per affected payment mode — each mode's own mapped account (cash or bank) takes its drawer's difference, netting against the shortage/over-short accounts — linked via `POSClosingEntry.variance_journal_entry`. Unconfigured accounts skip posting but the variance stays visible.
 
 Returns are excluded from drawer totals. Cancelled orders are excluded through `submitted_in_shift()`.
 
