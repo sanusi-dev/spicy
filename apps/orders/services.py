@@ -325,6 +325,7 @@ def delete_unsent_draft(order, deleted_by=None):
     snapshot = [
         {"item": line.item_name, "qty": str(line.qty), "amount": str(line.amount)} for line in locked.items.all()
     ]
+    locked.status = DISCARDED
     locked.discarded_by = deleted_by
     locked.discarded_at = timezone.now()
     with _transition(locked, flag="_allow_discard"):

@@ -20,6 +20,7 @@ from ..services import (
     add_order_line,
     cancel_sent_order,
     clear_order_lines,
+    create_draft_order,
     create_tickets,
     delete_unsent_draft,
     discard_order,
@@ -247,7 +248,9 @@ class OrderItemTest(OrderTestBase):
             order.delete()
 
     def test_delete_unsent_draft_keeps_tombstone_and_audit_trail(self):
-        order = self._create_order()
+        # Created through the service so a CREATED event exists for the
+        # tombstone to keep.
+        order = create_draft_order(self.opening, self.user)
         add_order_line(order, self.item, qty=1, rate=Decimal("1500"))
 
         delete_unsent_draft(order, deleted_by=self.user)

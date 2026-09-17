@@ -99,7 +99,7 @@ class OrderCancelTest(BackofficeViewTestBase):
         self.assertEqual(response.status_code, 302)
         order.refresh_from_db()
         self.assertEqual(order.status, "DISCARDED")
-        self.assertEqual(order.discarded_by, self.user)
+        self.assertEqual(order.discarded_by, self.manager)
         self.assertTrue(order.items.exists())
         self.assertTrue(order.audit_events.filter(event_type="ORDER_DELETED").exists())
 
