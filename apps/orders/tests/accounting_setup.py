@@ -24,10 +24,11 @@ class OrderAccountingMixin:
         for mode in ModeOfPayment.objects.all():
             account = cls.accounts["cash"] if mode.type == ModeOfPayment.TYPE_CASH else cls.accounts["bank"]
             PaymentGLMapping.objects.get_or_create(mode_of_payment=mode, defaults={"default_account": account})
-        # Point the stock warehouses at a stock account so drink COGS posts.
+        # Point the stock warehouses at their stock asset account: drink COGS
+        # debits the expense account and credits this warehouse account.
         for warehouse in Warehouse.objects.all():
             if not warehouse.account_id:
-                warehouse.account = cls.accounts["cogs"]
+                warehouse.account = cls.accounts["stock_in_hand"]
                 warehouse.save(update_fields=["account", "updated_at"])
         cls.restaurant.default_income_account = cls.accounts["food_sales"]
         cls.restaurant.default_expense_account = cls.accounts["cogs"]
