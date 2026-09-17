@@ -8,8 +8,9 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum
 from django.utils import timezone
 
-from apps.inventory.models import Bin, StockLedgerEntry
+from apps.inventory.models import StockLedgerEntry
 from apps.orders.models import SUBMITTED, Order, OrderItem
+from apps.orders.services import settle_time_rate
 from apps.staff.models import POSClosingEntry
 
 from .models import DRINKS, FOOD, DailyPnLCogsRow, PnLRecurringExpense
@@ -58,39 +59,6 @@ def sales_by_department(orders):
 
 def round_off(orders):
     return sum((o.rounding_adjustment for o in orders), ZERO).quantize(TWO)
-
-
-def _wastage_rate(return_order, line):
-    """Current WAC at return time — mirrors accounting._current_wac_for_return."""
-    sle = (
-        StockLedgerEntry.objects.filter(
-            voucher_type="POS Return",
-            voucher_no=str(return_order.pk),
-            item=line.item,
-            quantity__gt=0,
-        )
-        .order_by("-posting_date", "-posting_datetime", "-pk")
-        .first()
-    )
-    if sle is not None:
-        return sle.unit_rate
-    if return_order.stock_warehouse_id:
-        bin_obj = Bin.objects.filter(item=line.item, warehouse=return_order.stock_warehouse).first()
-        if bin_obj is not None and bin_obj.valuation_rate:
-            return bin_obj.valuation_rate
-    source_sle = (
-        StockLedgerEntry.objects.filter(
-            voucher_type="POS Order",
-            voucher_no=str(return_order.return_against_id),
-            item=line.item,
-            quantity__lt=0,
-        )
-        .order_by("-posting_date", "-posting_datetime", "-pk")
-        .first()
-    )
-    if source_sle is not None:
-        return source_sle.unit_rate
-    return ZERO
 
 
 def drink_cogs(start, end, orders):
@@ -143,7 +111,7 @@ def drink_cogs(start, end, orders):
         if not order.is_return:
             continue
         for line in order.items.select_related("item").filter(not_restockable=True, department=DRINKS):
-            rate = _wastage_rate(order, line)
+            rate = settle_time_rate(order.return_against, line.item)
             qty = abs(line.qty)
             amount = (qty * rate).quantize(TWO)
             total += amount

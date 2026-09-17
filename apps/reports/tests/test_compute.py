@@ -8,9 +8,16 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.accounting.models import GLEntry
-from apps.inventory.models import Recipe, RecipeItem, StockLedgerEntry, StockReconciliation, StockReconciliationItem
+from apps.inventory.models import (
+    Bin,
+    Recipe,
+    RecipeItem,
+    StockLedgerEntry,
+    StockReconciliation,
+    StockReconciliationItem,
+)
 from apps.inventory.services import submit_stock_reconciliation
-from apps.orders.services import add_order_line
+from apps.orders.services import add_order_line, make_return, submit_return, update_return_line
 from apps.reports.models import DailyPnL, DailyPnLLine, PnLMaterial, PnLRecurringExpense
 from apps.reports.services import business_day_window, compute_daily_pnl
 from apps.staff.models import ClosingPayment, POSClosingEntry
@@ -72,6 +79,42 @@ class SalesAndCogsTest(DailyPnLTestMixin, TestCase):
         self._settle(order)
         computation = compute_daily_pnl(self._draft())
         self.assertEqual(computation.totals["cogs"], Decimal("0"))
+
+    def test_wastage_return_cogs_uses_settle_time_rate(self):
+        # Sale at WAC 100, then a receipt lifts WAC to 140 — a wastage return of the
+        # first sale values at its settle-time 100 (the GL rate), not the bin's 140.
+        Bin.objects.filter(item=self.drink, warehouse=self.bar_wh).update(actual_qty=0, valuation_rate=0)
+        StockLedgerEntry.create_entry(
+            item=self.drink,
+            warehouse=self.bar_wh,
+            quantity=Decimal("1"),
+            voucher_type="Purchase Receipt",
+            voucher_no="PR-W1",
+            unit_rate=Decimal("100"),
+        )
+        sale = self._create_order()
+        add_order_line(sale, self.drink, qty=1, rate=Decimal("500"), menu_item=self.drink_mi)
+        self._settle(sale)
+        StockLedgerEntry.create_entry(
+            item=self.drink,
+            warehouse=self.bar_wh,
+            quantity=Decimal("1"),
+            voucher_type="Purchase Receipt",
+            voucher_no="PR-W2",
+            unit_rate=Decimal("140"),
+        )
+        other = self._create_order()
+        add_order_line(other, self.drink, qty=1, rate=Decimal("500"), menu_item=self.drink_mi)
+        self._settle(other)
+        ret = make_return(sale)
+        ret.recalculate_totals()
+        update_return_line(ret, ret.items.first().pk, not_restockable=True)
+        submit_return(ret, actor=self.user)
+        computation = compute_daily_pnl(self._draft())
+        wastage = [row for row in computation.cogs_rows if row["kind"] == "WASTAGE"]
+        self.assertEqual(len(wastage), 1)
+        self.assertEqual(wastage[0]["rate"], Decimal("100"))
+        self.assertEqual(wastage[0]["amount"], Decimal("100"))
 
     def test_drink_cogs_from_wac(self):
         # Reset WAC to known state — helper leaves 100 @ 0 which would dilute.

@@ -279,30 +279,10 @@ def _is_drink_line(line):
     return (line.department or getattr(line.item, "department", None)) == "DRINKS"
 
 
-def _settle_time_rate(source_order, item):
-    """WAC at the source order's settle-time stock deductions."""
-    from apps.inventory.models import StockLedgerEntry
-
-    sles = list(
-        StockLedgerEntry.objects.filter(
-            voucher_type="POS Order",
-            voucher_no=str(source_order.pk),
-            item=item,
-            quantity__lt=0,
-        )
-    )
-    if not sles:
-        raise ValidationError(f"Settle-time valuation rate for {item.item_name} cannot be resolved.")
-    qty = sum((abs(sle.quantity) for sle in sles), Decimal("0"))
-    value = sum((abs(sle.quantity) * sle.unit_rate for sle in sles), Decimal("0"))
-    if qty <= 0:
-        raise ValidationError(f"Settle-time valuation rate for {item.item_name} cannot be resolved.")
-    return value / qty
-
-
 def _current_wac_for_return(return_order, item):
     """Current WAC at return time — from restore SLE or Bin."""
     from apps.inventory.models import Bin, StockLedgerEntry
+    from apps.orders.services import settle_time_rate
 
     restore = (
         StockLedgerEntry.objects.filter(
@@ -320,7 +300,7 @@ def _current_wac_for_return(return_order, item):
         bin_obj = Bin.objects.filter(item=item, warehouse=return_order.stock_warehouse).first()
         if bin_obj and bin_obj.valuation_rate:
             return bin_obj.valuation_rate
-    return _settle_time_rate(return_order.return_against, item)
+    return settle_time_rate(return_order.return_against, item)
 
 
 def _plug_round_off(rows, settings):
@@ -364,6 +344,8 @@ def post_refund_gl(return_order):
     if not lines:
         raise ValidationError("The return has no refundable value.")
 
+    from apps.orders.services import settle_time_rate
+
     rows = []
     income_rows = _income_legs(return_order, _order_lines_with_accounts(return_order))
     for row in income_rows:
@@ -400,7 +382,7 @@ def post_refund_gl(return_order):
 
     for line in drink_returns:
         restore_value = (abs(line.qty) * _current_wac_for_return(return_order, line.item)).quantize(TWO_PLACES)
-        settle_value = (abs(line.qty) * _settle_time_rate(source, line.item)).quantize(TWO_PLACES)
+        settle_value = (abs(line.qty) * settle_time_rate(source, line.item)).quantize(TWO_PLACES)
         if not restore_value and not settle_value:
             continue
         expense = _resolve_required_account(unit_expense or default_expense, label="The default expense account")

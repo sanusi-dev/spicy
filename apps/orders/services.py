@@ -1129,8 +1129,8 @@ def update_return_line(order, line_pk, *, qty=None, not_restockable=None):
     return order
 
 
-def _original_cogs_rate(source_order, item):
-    """Return the WAC at which the source order's drink was issued (sale-time WAC)."""
+def settle_time_rate(source_order, item):
+    """Weighted-average WAC at which the source order issued the item."""
     sles = StockLedgerEntry.objects.filter(
         voucher_type="POS Order",
         voucher_no=str(source_order.pk),
@@ -1140,7 +1140,7 @@ def _original_cogs_rate(source_order, item):
     total_qty = sum((abs(s.quantity) for s in sles), Decimal("0"))
     total_value = sum((abs(s.quantity) * s.unit_rate for s in sles), Decimal("0"))
     if total_qty == 0:
-        return Decimal("0")
+        raise ValidationError(f"Settle-time valuation rate for {item.item_name} cannot be resolved.")
     return total_value / total_qty
 
 
@@ -1168,7 +1168,7 @@ def _restore_stock(order, voucher_type="POS Return"):
         # Current WAC before restore — need bin's current valuation.
         bin_obj = Bin.objects.filter(item=oi.item, warehouse=warehouse).first()
         current_wac = bin_obj.valuation_rate if bin_obj and bin_obj.valuation_rate else Decimal("0")
-        orig_rate = _original_cogs_rate(source, oi.item) if source else Decimal("0")
+        orig_rate = settle_time_rate(source, oi.item) if source else Decimal("0")
         qty = abs(oi.qty)
         variance = qty * (current_wac - orig_rate) if source and current_wac != orig_rate else Decimal("0")
         variance_type = "SALE_RETURN" if variance != 0 else ""
