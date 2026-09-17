@@ -385,6 +385,7 @@ def post_refund_gl(return_order):
     unit_expense = _expense_account_for("DRINKS")
     warehouse_account = None
     wastage_account = None
+    variance_account = None
     drink_returns = [line for line in lines if _is_drink_line(line)]
     if drink_returns:
         warehouse_account = _resolve_required_account(
@@ -398,28 +399,43 @@ def post_refund_gl(return_order):
         )
 
     for line in drink_returns:
-        rate = _current_wac_for_return(return_order, line.item)
-        value = (abs(line.qty) * rate).quantize(TWO_PLACES)
-        if not value:
+        restore_value = (abs(line.qty) * _current_wac_for_return(return_order, line.item)).quantize(TWO_PLACES)
+        settle_value = (abs(line.qty) * _settle_time_rate(source, line.item)).quantize(TWO_PLACES)
+        if not restore_value and not settle_value:
             continue
         expense = _resolve_required_account(unit_expense or default_expense, label="The default expense account")
-        rows.append({"account": expense, "credit": value})
-        rows.append({"account": warehouse_account, "debit": value})
+        rows.append({"account": expense, "credit": settle_value})
         if line.not_restockable:
+            rows.append({"account": warehouse_account, "debit": settle_value})
             rows.append(
                 {
                     "account": wastage_account,
-                    "debit": value,
+                    "debit": settle_value,
                     "against": warehouse_account.name,
                 }
             )
             rows.append(
                 {
                     "account": warehouse_account,
-                    "credit": value,
+                    "credit": settle_value,
                     "against": wastage_account.name,
                 }
             )
+        else:
+            rows.append({"account": warehouse_account, "debit": restore_value})
+            # Stock side moves at the bin's current value while COGS unwinds at the
+            # sale's settle-time cost — the drift posts to the variance account.
+            diff = restore_value - settle_value
+            if diff:
+                if variance_account is None:
+                    variance_account = _resolve_required_account(
+                        settings.inventory_price_variance_account if settings else None,
+                        label="The inventory price variance account",
+                    )
+                if diff > 0:
+                    rows.append({"account": variance_account, "credit": diff})
+                else:
+                    rows.append({"account": variance_account, "debit": -diff})
 
     # Wastage passthrough rows carry explicit against and legitimately touch one account on both sides.
     _ensure_disjoint_sides([row for row in rows if not row.get("against")])

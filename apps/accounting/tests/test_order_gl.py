@@ -15,6 +15,7 @@ from apps.orders.services import (
     make_return,
     settle_order,
     submit_return,
+    update_return_line,
 )
 from apps.payments.models import ModeOfPayment, PaymentGLMapping
 from apps.settings.models import ProductionUnit, Restaurant
@@ -219,6 +220,101 @@ class OrderCancelGLTest(OrderGLTestBase):
 
 
 class RefundGLTest(OrderGLTestBase):
+    def _clean_drink(self, name):
+        """A drink item with an empty bin, so WAC math in variance tests stays exact."""
+        item = Item.objects.create(
+            item_name=name,
+            item_group=self.group_drinks,
+            stock_uom=self.uom,
+            department="DRINKS",
+            is_sales_item=True,
+            is_stock_item=True,
+            is_purchase_item=True,
+        )
+        menu_item = MenuItem.objects.create(menu=self.menu, item=item, rate=Decimal("500"))
+        Bin.objects.create(item=item, warehouse=self.bar_wh, actual_qty=Decimal("0"))
+        return item, menu_item
+
+    def _drink_return_draft(self, drink, menu_item, second_rate):
+        """Sell 1, shift WAC with a second receipt, open a full return draft."""
+        StockLedgerEntry.create_entry(
+            item=drink,
+            warehouse=self.bar_wh,
+            quantity=Decimal("2"),
+            voucher_type="Purchase Receipt",
+            voucher_no="PR-V1",
+            unit_rate=Decimal("300"),
+        )
+        order = self._create_order()
+        add_order_line(order, drink, qty=1, rate=Decimal("500"), menu_item=menu_item)
+        self._settle(order)
+        StockLedgerEntry.create_entry(
+            item=drink,
+            warehouse=self.bar_wh,
+            quantity=Decimal("1"),
+            voucher_type="Purchase Receipt",
+            voucher_no="PR-V2",
+            unit_rate=second_rate,
+        )
+        ret = make_return(order)
+        ret.recalculate_totals()
+        return ret
+
+    def test_drink_refund_posts_variance_credit_when_wac_rises(self):
+        drink, menu_item = self._clean_drink("Rising WAC Drink")
+        ret = self._drink_return_draft(drink, menu_item, Decimal("700"))
+        submit_return(ret, actor=self.user)
+        ret.refresh_from_db()
+        entries = self._order_gl(ret)
+        # Sale cost 300; bin re-blended to 500 → stock restores at 500 while COGS
+        # unwinds at the settle-time 300, with the 200 drift credited to variance.
+        self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
+        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("500"))
+        self.assertEqual(entries.get(account=self.accounts["variance"]).credit, Decimal("200"))
+
+    def test_drink_refund_posts_variance_debit_when_wac_falls(self):
+        drink, menu_item = self._clean_drink("Falling WAC Drink")
+        ret = self._drink_return_draft(drink, menu_item, Decimal("100"))
+        submit_return(ret, actor=self.user)
+        ret.refresh_from_db()
+        entries = self._order_gl(ret)
+        self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
+        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("200"))
+        self.assertEqual(entries.get(account=self.accounts["variance"]).debit, Decimal("100"))
+
+    def test_drink_refund_without_wac_drift_has_no_variance_leg(self):
+        drink, menu_item = self._clean_drink("Stable WAC Drink")
+        ret = self._drink_return_draft(drink, menu_item, Decimal("300"))
+        submit_return(ret, actor=self.user)
+        ret.refresh_from_db()
+        entries = self._order_gl(ret)
+        self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
+        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("300"))
+        self.assertFalse(entries.filter(account=self.accounts["variance"]).exists())
+
+    def test_wastage_refund_posts_at_settle_time_rate(self):
+        wastage = LedgerAccount.objects.create(
+            name="Wasted Returns",
+            parent=self.accounts["expenses"],
+            account_type=LedgerAccount.EXPENSE,
+            report_type=LedgerAccount.PROFIT_AND_LOSS,
+        )
+        self.restaurant.wastage_account = wastage
+        self.restaurant.save(update_fields=["wastage_account", "updated_at"])
+        drink, menu_item = self._clean_drink("Wasted Drink")
+        ret = self._drink_return_draft(drink, menu_item, Decimal("700"))
+        update_return_line(ret, ret.items.first().pk, not_restockable=True)
+        submit_return(ret, actor=self.user)
+        ret.refresh_from_db()
+        entries = self._order_gl(ret)
+        self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
+        self.assertEqual(entries.get(account=wastage).debit, Decimal("300"))
+        # Destroyed stock never re-enters: the SIH passthrough legs cancel out.
+        sih_net = sum(
+            (e.debit or Decimal("0")) - (e.credit or Decimal("0")) for e in entries.filter(account=self.bar_wh.account)
+        )
+        self.assertEqual(sih_net, Decimal("0"))
+
     def test_return_posts_mirrored_refund(self):
         order = self._create_order()
         add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
