@@ -108,6 +108,17 @@ class POSOpeningEntry(BaseModel):
                 raise ValidationError(
                     "An open shift already exists. Close the existing shift before opening a new one."
                 )
+            cash_rows = [
+                op
+                for op in self.opening_payments.select_related("mode_of_payment")
+                if op.mode_of_payment.type == ModeOfPayment.TYPE_CASH
+            ]
+            if len(cash_rows) > 1:
+                names = ", ".join(op.mode_of_payment.name for op in cash_rows)
+                raise ValidationError(
+                    f"A shift can declare at most one cash payment mode (declared: {names}). "
+                    "Change and the close variance need a single drawer."
+                )
             self.status = self.SUBMITTED
             self.save(update_fields=["status", "updated_at"])
 

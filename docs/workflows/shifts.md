@@ -8,7 +8,7 @@
 
 ### POS path
 
-`templates/pos/partials/gates/no_shift.html` renders one amount input per enabled `ModeOfPayment`. `pos_open_shift()` binds `OpeningFloatForm`, requires at least one enabled mode, and calls `staff.services.open_shift()`.
+`templates/pos/partials/gates/no_shift.html` renders one amount input per enabled `ModeOfPayment`. `pos_open_shift()` binds `OpeningFloatForm`, requires at least one enabled mode, and calls `staff.services.open_shift()`. `POSOpeningEntry.submit()` enforces at most one cash-type mode per shift — a single drawer backs change and the close variance, so multi-drawer change attribution cannot arise.
 
 `open_shift()` (`apps/staff/services.py:99-124`) runs atomically, locks `Restaurant`, checks for an existing open shift, creates the opening and child rows, validates the entry, and calls `POSOpeningEntry.submit()`. The model method repeats the one-open-shift check while holding the Restaurant and open-shift locks.
 

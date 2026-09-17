@@ -36,6 +36,17 @@ class POSOpeningEntryTestBase(TestCase):
 
 
 class POSOpeningEntryModelTest(POSOpeningEntryTestBase):
+    def test_submit_rejects_second_cash_mode(self):
+        second_cash = ModeOfPayment.objects.create(name="Test Safe", type="CASH")
+        PaymentGLMapping.objects.create(mode_of_payment=second_cash, default_account=self.accounts["cash"])
+        OpeningPayment.objects.create(
+            opening_entry=self.entry, mode_of_payment=second_cash, opening_amount=Decimal("1000")
+        )
+        with self.assertRaisesMessage(ValidationError, "at most one cash payment mode"):
+            self.entry.submit()
+        self.entry.refresh_from_db()
+        self.assertEqual(self.entry.status, POSOpeningEntry.DRAFT)
+
     def test_submit_flips_status(self):
         self.entry.submit()
         self.assertEqual(self.entry.status, POSOpeningEntry.SUBMITTED)

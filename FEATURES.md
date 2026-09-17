@@ -73,7 +73,7 @@ Implementation status lives in `PLAN.md`.
 
 | # | Feature | What it does |
 |---|---|---|
-| 23 | POS opening entry | Starts the shift: period, cashier, and an opening float per payment mode. Exactly one shift can be open at a time. |
+| 23 | POS opening entry | Starts the shift: period, cashier, and an opening float per payment mode — at most one cash-type mode may be declared per shift (a single drawer backs change and the close variance). Exactly one shift can be open at a time. |
 | 24 | POS closing entry | Ends the shift with a reconciliation per payment mode: opening float, expected amount, cashier-counted amount, and difference. Only the cashier who opened the shift, or a Manager/Admin, can close it. Aggregates the shift's submitted orders. The closing detail shows frozen shift sales totals (bills, qty, net, grand, refunded); the list shows net sales. |
 | 25 | Shift guards | Closing is blocked while open draft orders exist; a shift with attached orders cannot be cancelled; a closing entry cannot be cancelled once a newer shift is open. |
 | 26 | Refund netting | Expected drawer amounts subtract refunds from return orders submitted during the shift and net off cash change and cash-outs. |
