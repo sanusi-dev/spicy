@@ -147,12 +147,15 @@ class ClosingPeriodEndIncludesLateOrdersTest(ReviewFixBase):
             period_end_date=timezone.now() - timedelta(hours=1),
         )
         for op in self.opening.opening_payments.all():
+            # Counted cash covers the settled order; bank processed nothing, and
+            # an over-counted non-cash total is rejected at submit.
+            counted = Decimal("1000") if op.mode_of_payment.type == ModeOfPayment.TYPE_CASH else Decimal("0")
             ClosingPayment.objects.create(
                 closing_entry=closing,
                 mode_of_payment=op.mode_of_payment,
                 opening_amount=op.opening_amount,
                 expected_amount=op.opening_amount,
-                closing_amount=Decimal("1000"),
+                closing_amount=counted,
             )
         order = self._draft_order_with_item()
         settle_order(
