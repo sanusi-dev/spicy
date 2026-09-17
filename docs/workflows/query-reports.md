@@ -14,7 +14,7 @@ Sales reports filter `Order.posting_date` as a calendar date. Today is `posting_
 
 Source is `Order.status=SUBMITTED` only. `DRAFT`, `CANCELLED`, and `DISCARDED` never count as sales. Returns (`is_return=True`) net off on the return's own `posting_date` as negative `grand_total` / `OrderItem.amount`. Net = gross (item amounts) + `rounding_adjustment` (equivalently `Sum(rounded_total)`). Refunded is the absolute value of return `grand_total`.
 
-Department columns come from `OrderItem.department` (FOOD / DRINKS).
+Department columns come from `OrderItem.department` (FOOD / DRINKS — DB-constrained, so the split can never lose a line to a missing department).
 
 ## Sales reports
 

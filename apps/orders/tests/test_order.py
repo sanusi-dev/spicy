@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import connection, connections, transaction
+from django.db import IntegrityError, connection, connections, transaction
 from django.test import TestCase, TransactionTestCase
 
 from apps.inventory.models import UOM, Bin, Item, ItemGroup, StockLedgerEntry, Warehouse
@@ -15,7 +15,7 @@ from apps.payments.models import ModeOfPayment, PaymentGLMapping
 from apps.settings.models import ProductionUnit, Restaurant
 from apps.staff.models import OpeningPayment, POSOpeningEntry
 
-from ..models import DISCARDED, Order, OrderPayment, OrderSequence
+from ..models import DISCARDED, Order, OrderItem, OrderPayment, OrderSequence
 from ..services import (
     add_order_line,
     cancel_sent_order,
@@ -120,6 +120,19 @@ class OrderItemTest(OrderTestBase):
         add_order_line(order, self.item, qty=2, rate=Decimal("1500"))
         self.assertEqual(order.items.count(), 1)
         self.assertEqual(order.items.first().qty, Decimal("2"))
+
+    def test_department_snapshots_from_item(self):
+        order = self._create_order()
+        add_order_line(order, self.item, qty=2, rate=Decimal("1500"))
+        self.assertEqual(order.items.first().department, self.item.department)
+
+    def test_department_constraint_rejects_null_and_unknown_values(self):
+        order = self._create_order()
+        add_order_line(order, self.item, qty=1, rate=Decimal("1500"))
+        pk = order.items.first().pk
+        for bad in (None, "OTHER"):
+            with self.subTest(value=bad), self.assertRaises(IntegrityError), transaction.atomic():
+                OrderItem.objects.filter(pk=pk).update(department=bad)
 
     def test_add_item_increments_existing(self):
         order = self._create_order()

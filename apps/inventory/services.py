@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
@@ -116,7 +117,10 @@ def compute_food_usage(business_date):
     start, end = business_day_window(business_date, config.business_day_start_hour)
     orders = orders_in_window(start, end)
     lines = (
-        OrderItem.objects.filter(order_id__in=[o.pk for o in orders], department="FOOD")
+        OrderItem.objects.filter(
+            Q(department="FOOD") | Q(department__isnull=True, item__department="FOOD"),
+            order_id__in=[o.pk for o in orders],
+        )
         .select_related("item")
         .order_by("pk")
     )

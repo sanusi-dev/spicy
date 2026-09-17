@@ -110,7 +110,7 @@ Most project domain models extend `apps.utils.models.BaseModel`, adding `created
 ## Important Constraints and Methods
 
 - `Order` constrains guest count, cancellation reason, and unique human order number.
-- `OrderItem` constrains positive normal quantity, non-negative rate, customer index, and `not_restockable` on return lines only (DB check constraint); return lines are negative and linked to source lines.
+- `OrderItem` constrains positive normal quantity, non-negative rate, customer index, `department` ∈ FOOD/DRINKS (never NULL), and `not_restockable` on return lines only (DB check constraint); return lines are negative and linked to source lines.
 - `Order.save()`, `OrderItem.save/delete()`, `OrderPayment.save/delete()`, KOT saves, and audit-event saves enforce historical protections.
 - Inventory document saves reject most post-submit mutations, but service functions remain required because direct status changes can bypass posting.
 - `StockLedgerEntry` has no model-level save/delete immutability guard; `editable=False` does not protect direct ORM writes.

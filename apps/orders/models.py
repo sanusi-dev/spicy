@@ -416,6 +416,10 @@ class OrderItem(BaseModel):
             models.CheckConstraint(condition=Q(rate__gte=0), name="orders_item_rate_gte_zero"),
             models.CheckConstraint(condition=Q(customer_index__gte=1), name="orders_item_customer_gte_one"),
             models.CheckConstraint(
+                condition=Q(department__in=("FOOD", "DRINKS")),
+                name="orders_item_department_valid",
+            ),
+            models.CheckConstraint(
                 condition=~Q(not_restockable=True) | Q(return_against_item__isnull=False),
                 name="orders_item_not_restockable_return_only",
             ),

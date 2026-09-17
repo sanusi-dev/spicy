@@ -41,12 +41,18 @@ def orders_in_window(start, end):
 
 
 def sales_by_department(orders):
+    """Food and drinks gross from line amounts; NULL department snapshots fall back to the item's department."""
     if not orders:
         return ZERO, ZERO
     rows = (
-        OrderItem.objects.filter(order_id__in=[o.pk for o in orders]).values("department").annotate(total=Sum("amount"))
+        OrderItem.objects.filter(order_id__in=[o.pk for o in orders])
+        .values("department", "item__department")
+        .annotate(total=Sum("amount"))
     )
-    by_dept = {row["department"]: row["total"] or ZERO for row in rows}
+    by_dept = {}
+    for row in rows:
+        department = row["department"] or row["item__department"]
+        by_dept[department] = by_dept.get(department, ZERO) + (row["total"] or ZERO)
     return by_dept.get(FOOD, ZERO), by_dept.get(DRINKS, ZERO)
 
 
