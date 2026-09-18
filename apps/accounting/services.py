@@ -14,8 +14,6 @@ from apps.utils.rounding import money
 from .models import GLEntry, JournalEntry, JournalEntryAccount
 from .payables_models import SupplierInvoiceItem
 
-TWO_PLACES = Decimal("0.01")
-
 
 def _income_account_for(department):
     """Resolve the income account: ProductionUnit (by department) → Restaurant default."""
@@ -150,7 +148,7 @@ def _cogs_legs(order, rows, settings):
         if account is None:
             raise ValidationError("The default expense account is not configured.")
         account = _resolve_required_account(account, label="The default expense account")
-        value = (abs(sle.quantity) * sle.unit_rate).quantize(TWO_PLACES)
+        value = money(abs(sle.stock_value_change))
         per_account[account.pk] = {
             "account": account,
             "debit": per_account.get(account.pk, {}).get("debit", Decimal("0")) + value,

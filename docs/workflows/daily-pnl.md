@@ -182,7 +182,7 @@ These are queried when `compute_daily_pnl()` runs. A draft's preview will change
 |---|---|---|
 | Food / drinks sales | Submitted `OrderItem.amount` summed by `department`, falling back to the item's department when a line's snapshot is NULL (matching the GL income legs) | Orders whose settlement-stamped `posting_date` + `posting_time` fall in the business-day window |
 | Round-off | Sum of `Order.rounding_adjustment` | Same orders |
-| Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add `qty × unit_rate`; restock returns (`POS Return`, qty > 0) subtract; non-restockable return lines add wastage |
+| Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add the SLE's booked value (`abs(stock_value_change)`); restock returns (`POS Return`, qty > 0) subtract it; non-restockable return lines add wastage |
 | Food COGS (actual) | Kitchen `CONSUMPTION` + `WASTE_DAMAGE` reconciliation SLEs via `inventory.services.compute_food_usage()` | Rec `posting_date` **equals** the P&L `business_date` (calendar date, not the hour window); `ADJUSTMENT` excluded |
 | Theoretical food cost (memo) | Active recipe × submitted FOOD `OrderItem` qty in the window (returns net; NULL department snapshots fall back to the item's department) | Same rate per ingredient as actual (actual-SLE WAC, else bin WAC, else last rate) |
 | Food cost variance (memo) | Theoretical − actual | Quantity story in qty and naira |

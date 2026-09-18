@@ -113,7 +113,7 @@ def compute_food_usage(business_date):
     """Single source for AvT + Daily P&L: theoretical (recipe × sales) vs actual (kitchen SLEs)."""
     from apps.orders.models import OrderItem
     from apps.reports.models import PnLConfiguration
-    from apps.reports.sources import TWO, ZERO, business_day_window, orders_in_window
+    from apps.reports.sources import ZERO, business_day_window, orders_in_window
 
     config = PnLConfiguration.load()
     start, end = business_day_window(business_date, config.business_day_start_hour)
@@ -196,7 +196,7 @@ def compute_food_usage(business_date):
                     },
                 )
                 qty = abs(sle.quantity)
-                amount = (qty * sle.unit_rate).quantize(TWO)
+                amount = money(abs(sle.stock_value_change))
                 if reason_by_no[sle.voucher_no] == "WASTE_DAMAGE":
                     entry["waste_qty"] += qty
                     entry["waste_amount"] += amount
@@ -595,20 +595,13 @@ def cancel_stock_entry(entry):
 
                 mode = ModeOfPayment.objects.get(pk=locked.mode_of_payment_id)
                 funding_acct = _resolve_payment_account(mode)
-                # Original as-bought money per receipt line — qty × per-stock-unit rate can round.
-                detail_amounts = {}
-                if locked.purpose == "MATERIAL_RECEIPT":
-                    detail_amounts = {d.pk: d.amount for d in StockEntryDetail.objects.filter(stock_entry_id=locked.pk)}
-                # SIH moves by the bin's current value; the funding leg returns the original
-                # money. Any difference (WAC drift or rate rounding) goes to the variance account.
+                # SIH moves by the bin's current value; the funding leg returns the
+                # value the ledger booked. Any difference (WAC drift) goes to the variance account.
                 line_amounts = []
                 for sle in sles:
                     pre_wac = pre_wac_map[sle.pk]
-                    curr_amount = (sle.quantity * pre_wac).quantize(Decimal("0.01"))
-                    orig_amount = (sle.quantity * sle.unit_rate).quantize(Decimal("0.01"))
-                    detail_amount = detail_amounts.get(int(sle.voucher_detail_no or 0))
-                    if detail_amount:
-                        orig_amount = detail_amount
+                    curr_amount = money(sle.quantity * pre_wac)
+                    orig_amount = money(sle.stock_value_change)
                     line_amounts.append((sle, curr_amount, orig_amount))
                 variance_acct = None
                 if any(curr != orig for _sle, curr, orig in line_amounts):
@@ -749,7 +742,7 @@ def submit_stock_reconciliation(reconciliation, actor=None):
                 posting_date=locked.posting_date,
                 bin_obj=bin_obj,
             )
-            amount = (abs(sle.quantity) * sle.unit_rate).quantize(Decimal("0.01"))
+            amount = money(abs(sle.stock_value_change))
             if amount:
                 gl_rows.append({"account": wastage_acct, "debit": amount, "against": sih_acct.name})
                 gl_rows.append({"account": sih_acct, "credit": amount, "against": wastage_acct.name})
@@ -789,7 +782,7 @@ def submit_stock_reconciliation(reconciliation, actor=None):
             posting_date=locked.posting_date,
             bin_obj=bin_obj,
         )
-        amount = (abs(sle.quantity) * sle.unit_rate).quantize(Decimal("0.01"))
+        amount = money(abs(sle.stock_value_change))
         if not amount:
             continue
         if locked.reason == "OPENING_STOCK":
@@ -1054,8 +1047,8 @@ def cancel_purchase_receipt(receipt):
         has_drift = False
         for sle in sles:
             pre_wac = pre_wac_map[sle.pk]
-            curr_amount = (sle.quantity * pre_wac).quantize(Decimal("0.01"))
-            orig_amount = (sle.quantity * sle.unit_rate).quantize(Decimal("0.01"))
+            curr_amount = money(sle.quantity * pre_wac)
+            orig_amount = money(sle.stock_value_change)
             if curr_amount != orig_amount:
                 has_drift = True
                 break
@@ -1068,8 +1061,8 @@ def cancel_purchase_receipt(receipt):
         new_rows = []
         for sle in sles:
             pre_wac = pre_wac_map[sle.pk]
-            curr_amount = (sle.quantity * pre_wac).quantize(Decimal("0.01"))
-            orig_amount = (sle.quantity * sle.unit_rate).quantize(Decimal("0.01"))
+            curr_amount = money(sle.quantity * pre_wac)
+            orig_amount = money(sle.stock_value_change)
             sih_acct = _resolve_account(sle.warehouse.account, "The warehouse account")
             new_rows.append({"account": sih_acct, "credit": curr_amount})
             new_rows.append({"account": grni_acct, "debit": orig_amount})

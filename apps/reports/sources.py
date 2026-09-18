@@ -16,7 +16,6 @@ from apps.utils.rounding import money
 
 from .models import DRINKS, FOOD, DailyPnLCogsRow, PnLRecurringExpense
 
-TWO = Decimal("0.01")
 ZERO = Decimal("0")
 
 
@@ -77,7 +76,7 @@ def drink_cogs(start, end, orders):
         ).select_related("item")
         for sle in sales:
             qty = abs(sle.quantity)
-            amount = (qty * sle.unit_rate).quantize(TWO)
+            amount = money(abs(sle.stock_value_change))
             total += amount
             rows.append(
                 {
@@ -97,7 +96,7 @@ def drink_cogs(start, end, orders):
         ).select_related("item")
         for sle in returns:
             qty = sle.quantity
-            amount = (qty * sle.unit_rate).quantize(TWO)
+            amount = money(sle.stock_value_change)
             total -= amount
             rows.append(
                 {
