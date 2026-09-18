@@ -12,6 +12,7 @@ from apps.inventory.models import StockLedgerEntry
 from apps.orders.models import SUBMITTED, Order, OrderItem
 from apps.orders.services import settle_time_rate
 from apps.staff.models import POSClosingEntry
+from apps.utils.rounding import money
 
 from .models import DRINKS, FOOD, DailyPnLCogsRow, PnLRecurringExpense
 
@@ -58,7 +59,7 @@ def sales_by_department(orders):
 
 
 def round_off(orders):
-    return sum((o.rounding_adjustment for o in orders), ZERO).quantize(TWO)
+    return money(sum((o.rounding_adjustment for o in orders), ZERO))
 
 
 def drink_cogs(start, end, orders):
@@ -113,7 +114,7 @@ def drink_cogs(start, end, orders):
         for line in order.items.select_related("item").filter(not_restockable=True, department=DRINKS):
             rate = settle_time_rate(order.return_against, line.item)
             qty = abs(line.qty)
-            amount = (qty * rate).quantize(TWO)
+            amount = money(qty * rate)
             total += amount
             rows.append(
                 {
@@ -124,7 +125,7 @@ def drink_cogs(start, end, orders):
                     "kind": DailyPnLCogsRow.WASTAGE,
                 }
             )
-    return total.quantize(TWO), rows
+    return money(total), rows
 
 
 def cash_variance(start, end, include):
@@ -136,7 +137,7 @@ def cash_variance(start, end, include):
         period_end_date__lt=end,
     )
     native = sum((c.total_short_excess for c in closings), ZERO)
-    return (-native).quantize(TWO)
+    return money(-native)
 
 
 def electricity(pnl, rate):
@@ -147,7 +148,7 @@ def electricity(pnl, rate):
     if rate <= 0:
         raise ValidationError("Set the electricity rate in P&L settings.")
     units = pnl.electricity_closing - pnl.electricity_opening
-    return (units * rate).quantize(TWO)
+    return money(units * rate)
 
 
 def recurring_amount(expense, business_date, gross_sales):

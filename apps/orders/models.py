@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.inventory.models import Item
 from apps.payments.models import ModeOfPayment
 from apps.utils.models import BaseModel
+from apps.utils.rounding import cash_round, money
 
 DRAFT = "DRAFT"
 SUBMITTED = "SUBMITTED"
@@ -59,9 +60,6 @@ CANCEL_REASON_CHOICES = [
     (CANCEL_REASON_CASHIER_ERROR, "Cashier error"),
     (CANCEL_REASON_OTHER, "Other"),
 ]
-
-
-TWO_PLACES = Decimal("0.01")
 
 
 class OrderQuerySet(models.QuerySet):
@@ -294,7 +292,7 @@ class Order(BaseModel):
         total = self.items.aggregate(t=Sum("amount"))["t"] or Decimal("0")
         self.net_total = total
         self.grand_total = self.net_total
-        self.rounded_total = self.grand_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        self.rounded_total = cash_round(self.grand_total)
         self.rounding_adjustment = self.rounded_total - self.grand_total
         self.save(
             update_fields=[
@@ -495,7 +493,7 @@ class OrderItem(BaseModel):
             raise ValidationError("Quantity must be greater than zero.")
         self.qty = qty
         self.rate = rate
-        self.amount = (self.qty * self.rate).quantize(TWO_PLACES)
+        self.amount = money(self.qty * self.rate)
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -531,7 +529,7 @@ class OrderPayment(BaseModel):
             amount = Decimal(str(self.amount))
         except (TypeError, ValueError, InvalidOperation) as exc:
             raise ValidationError("Payment amount must be a valid decimal.") from exc
-        if not amount.is_finite() or amount != amount.quantize(TWO_PLACES):
+        if not amount.is_finite() or amount != money(amount):
             raise ValidationError("Payment amount must be finite and valid to 2 decimal places.")
         order = self.order if self.order_id else None
         if order is None:

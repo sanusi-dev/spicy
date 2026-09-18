@@ -8,6 +8,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.utils.rounding import TWO_PLACES, money
+
 from .models import (
     Bin,
     Item,
@@ -73,7 +75,7 @@ def _kitchen_warehouse():
 def _ingredient_rate(ingredient, kitchen, actual_qty, actual_amount):
     """Weighted actual-SLE rate, else Kitchen bin WAC, else last purchase rate, else 0."""
     if actual_qty:
-        return (actual_amount / actual_qty).quantize(Decimal("0.01"))
+        return money(actual_amount / actual_qty)
     if kitchen is not None:
         bin_obj = Bin.objects.filter(item=ingredient, warehouse=kitchen).first()
         if bin_obj is not None and bin_obj.valuation_rate:
@@ -104,7 +106,7 @@ def _plate_cost(output_qty, rows):
         total += line.qty * rate
     if not output_qty:
         return Decimal("0")
-    return (total / output_qty).quantize(Decimal("0.01"))
+    return money(total / output_qty)
 
 
 def compute_food_usage(business_date):
@@ -219,31 +221,31 @@ def compute_food_usage(business_date):
         entry = actual.get(usage.ingredient_id, {})
         usage.consumption_qty = entry.get("consumption_qty", ZERO)
         usage.waste_qty = entry.get("waste_qty", ZERO)
-        usage.actual_qty = (usage.consumption_qty + usage.waste_qty).quantize(TWO)
-        usage.theoretical_qty = usage.theoretical_qty.quantize(TWO)
-        usage.consumption_amount = entry.get("consumption_amount", ZERO).quantize(TWO)
-        usage.waste_amount = entry.get("waste_amount", ZERO).quantize(TWO)
-        usage.actual_amount = entry.get("amount", ZERO).quantize(TWO)
+        usage.actual_qty = (usage.consumption_qty + usage.waste_qty).quantize(TWO_PLACES)
+        usage.theoretical_qty = usage.theoretical_qty.quantize(TWO_PLACES)
+        usage.consumption_amount = money(entry.get("consumption_amount", ZERO))
+        usage.waste_amount = money(entry.get("waste_amount", ZERO))
+        usage.actual_amount = money(entry.get("amount", ZERO))
         ingredient = entry.get("ingredient")
         if ingredient is None:
             ingredient = Item.objects.select_related("stock_uom").get(pk=usage.ingredient_id)
         usage.rate = _ingredient_rate(ingredient, kitchen, usage.actual_qty, usage.actual_amount)
         usage.rate_estimated = usage.rate == 0
-        usage.theoretical_amount = (usage.theoretical_qty * usage.rate).quantize(TWO)
-        usage.variance_qty = (usage.theoretical_qty - usage.actual_qty).quantize(TWO)
-        usage.variance_amount = (usage.theoretical_amount - usage.actual_amount).quantize(TWO)
+        usage.theoretical_amount = money(usage.theoretical_qty * usage.rate)
+        usage.variance_qty = (usage.theoretical_qty - usage.actual_qty).quantize(TWO_PLACES)
+        usage.variance_amount = money(usage.theoretical_amount - usage.actual_amount)
         usages.append(usage)
     usages.sort(key=lambda u: u.ingredient_name)
     unmapped_list = sorted(unmapped.values(), key=lambda d: d.item_name)
     for dish in unmapped_list:
-        dish.qty = dish.qty.quantize(TWO)
-        dish.amount = dish.amount.quantize(TWO)
+        dish.qty = dish.qty.quantize(TWO_PLACES)
+        dish.amount = money(dish.amount)
     return FoodUsage(
         usages=usages,
         unmapped=unmapped_list,
-        theoretical_cost=sum((u.theoretical_amount for u in usages), ZERO).quantize(TWO),
-        actual_cost=sum((u.actual_amount for u in usages), ZERO).quantize(TWO),
-        variance_cost=sum((u.variance_amount for u in usages), ZERO).quantize(TWO),
+        theoretical_cost=money(sum((u.theoretical_amount for u in usages), ZERO)),
+        actual_cost=money(sum((u.actual_amount for u in usages), ZERO)),
+        variance_cost=money(sum((u.variance_amount for u in usages), ZERO)),
     )
 
 
@@ -399,7 +401,7 @@ def submit_stock_entry(entry):
             # GL: Dr SIH / Cr funding account (market purchase, no GRNI)
             if detail.amount:
                 sih_account = _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account")
-                amount = detail.amount.quantize(Decimal("0.01"))
+                amount = money(detail.amount)
                 gl_rows.append({"account": sih_account, "debit": amount})
                 gl_rows.append({"account": funding_acct, "credit": amount})
         else:
@@ -960,7 +962,7 @@ def submit_purchase_receipt(receipt):
         restaurant.stock_received_but_not_billed_account, "The stock received but not billed account"
     )
     sih_acct = _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account")
-    stock_total = sum((line.amount for line in lines), Decimal("0")).quantize(Decimal("0.01"))
+    stock_total = money(sum((line.amount for line in lines), Decimal("0")))
     if stock_total:
         GLEntry.post(
             posting_date=locked.posting_date,

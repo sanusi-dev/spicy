@@ -4,13 +4,13 @@ from decimal import Decimal
 
 from apps.staff.models import POSClosingEntry
 from apps.users.models import CustomUser
+from apps.utils.rounding import money
 
 ZERO = Decimal("0")
-TWO = Decimal("0.01")
 
 
 def _q2(value):
-    return (value or ZERO).quantize(TWO)
+    return money(value or ZERO)
 
 
 def pos_register(date_from=None, date_to=None, *, cashier_id=None):

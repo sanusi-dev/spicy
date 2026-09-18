@@ -9,15 +9,15 @@ from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
 
 from apps.orders.models import CANCELLED, SUBMITTED, Order, OrderItem
+from apps.utils.rounding import money
 
 from .models import DRINKS, FOOD
 
 ZERO = Decimal("0")
-TWO = Decimal("0.01")
 
 
 def _q2(value):
-    return (value or ZERO).quantize(TWO)
+    return money(value or ZERO)
 
 
 def submitted_orders(date_from=None, date_to=None):

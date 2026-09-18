@@ -6,6 +6,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from apps.utils.models import BaseModel
+from apps.utils.rounding import TWO_PLACES, money
 
 
 class InsufficientStock(ValidationError):
@@ -569,7 +570,7 @@ class StockEntryDetail(BaseModel):
         """Entered quantity converted to the item's stock UOM (2 dp)."""
         if self.stock_entry_id and self.stock_entry.purpose == "MATERIAL_TRANSFER":
             return self.qty
-        qty = (Decimal(str(self.qty)) * Decimal(str(self.conversion_factor))).quantize(Decimal("0.01"))
+        qty = (Decimal(str(self.qty)) * Decimal(str(self.conversion_factor))).quantize(TWO_PLACES)
         if qty <= 0:
             raise ValidationError(f"Stock quantity for {self.item.item_name} must be greater than zero.")
         return qty
@@ -578,8 +579,8 @@ class StockEntryDetail(BaseModel):
         """As-bought amount per stock UOM (2 dp)."""
         qty = self.stock_qty()
         amount = self.amount if self.amount else (Decimal(str(self.qty)) * Decimal(str(self.basic_rate)))
-        amount = Decimal(str(amount)).quantize(Decimal("0.01"))
-        return (amount / qty).quantize(Decimal("0.01"))
+        amount = money(amount)
+        return money(amount / qty)
 
     def _derive_conversion(self):
         """Populate uom/conversion_factor from the line's item, transfer-safe."""
@@ -611,7 +612,7 @@ class StockEntryDetail(BaseModel):
         if update_fields is None or self._state.adding or {"item_id", "uom_id"} & set(update_fields):
             self._derive_conversion()
             if self.stock_entry_id and self.stock_entry.purpose == "MATERIAL_RECEIPT":
-                self.amount = (Decimal(str(self.qty)) * Decimal(str(self.basic_rate))).quantize(Decimal("0.01"))
+                self.amount = money(Decimal(str(self.qty)) * Decimal(str(self.basic_rate)))
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -861,7 +862,7 @@ class PurchaseReceiptItem(BaseModel):
 
     def stock_qty(self):
         """Received quantity converted to the item's stock UOM."""
-        qty = (Decimal(str(self.received_qty)) * Decimal(str(self.conversion_factor))).quantize(Decimal("0.01"))
+        qty = (Decimal(str(self.received_qty)) * Decimal(str(self.conversion_factor))).quantize(TWO_PLACES)
         if qty <= 0:
             raise ValidationError(f"Stock quantity for {self.item.item_name} must be greater than zero.")
         return qty
@@ -870,8 +871,8 @@ class PurchaseReceiptItem(BaseModel):
         """As-bought amount per stock UOM (2 dp)."""
         qty = self.stock_qty()
         amount = self.amount if self.amount else (Decimal(str(self.received_qty)) * Decimal(str(self.rate)))
-        amount = Decimal(str(amount)).quantize(Decimal("0.01"))
-        return (amount / qty).quantize(Decimal("0.01"))
+        amount = money(amount)
+        return money(amount / qty)
 
     def _derive_conversion_factor(self):
         if not self.item_id:
@@ -891,7 +892,7 @@ class PurchaseReceiptItem(BaseModel):
         if self.purchase_receipt_id:
             _assert_document_is_draft(self.purchase_receipt, action="modify lines on")
         self._derive_conversion_factor()
-        self.amount = (Decimal(str(self.received_qty)) * Decimal(str(self.rate))).quantize(Decimal("0.01"))
+        self.amount = money(Decimal(str(self.received_qty)) * Decimal(str(self.rate)))
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

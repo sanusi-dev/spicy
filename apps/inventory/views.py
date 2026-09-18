@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.users.decorators import backoffice_required
 from apps.utils.csv_export import export_filename, money, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
+from apps.utils.rounding import TWO_PLACES
 
 from . import services
 from .forms import (
@@ -754,7 +755,7 @@ def _stock_qty_preview_text(item, uom, qty):
         return ""
     try:
         factor = item.uom_factor(uom)
-        stock_qty = (qty * factor).quantize(Decimal("0.01"))
+        stock_qty = (qty * factor).quantize(TWO_PLACES)
     except ValidationError, InvalidOperation:
         return ""
     qty_display = format(qty.normalize(), "f")

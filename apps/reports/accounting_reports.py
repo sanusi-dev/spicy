@@ -10,15 +10,15 @@ from django.urls import reverse
 from apps.accounting.models import GLEntry, LedgerAccount
 from apps.orders.models import Order
 from apps.settings.models import ProductionUnit, Restaurant
+from apps.utils.rounding import money
 
 from .models import DRINKS, FOOD
 
 ZERO = Decimal("0")
-TWO = Decimal("0.01")
 
 
 def _q2(value):
-    return (value or ZERO).quantize(TWO)
+    return money(value or ZERO)
 
 
 def _gl_queryset(*, fiscal_year=None, date_from=None, date_to=None, account_id=None):

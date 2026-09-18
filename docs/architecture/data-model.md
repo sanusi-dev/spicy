@@ -42,7 +42,7 @@ erDiagram
 
 ## Shared Conventions
 
-Most project domain models extend `apps.utils.models.BaseModel`, adding `created_at` and `updated_at`; `users.CustomUser` instead extends Django's `AbstractUser`. Money and quantities use `DecimalField`; no money uses `FloatField`. Foreign keys for historical business documents generally use `PROTECT` or `SET_NULL`. Child rows of draft documents use `CASCADE` where deleting the parent is still allowed.
+Most project domain models extend `apps.utils.models.BaseModel`, adding `created_at` and `updated_at`; `users.CustomUser` instead extends Django's `AbstractUser`. Money and quantities use `DecimalField`; no money uses `FloatField`. Money rounding goes through `apps.utils.rounding`: 2 dp amounts are rounded half-even (`money()`), whole-naira cash totals half-up (`cash_round()`), and percentages 3 dp half-even (`percent()`). Foreign keys for historical business documents generally use `PROTECT` or `SET_NULL`. Child rows of draft documents use `CASCADE` where deleting the parent is still allowed.
 
 ## Settings and Routing
 

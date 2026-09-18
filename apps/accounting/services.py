@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.orders.models import SUBMITTED
 from apps.payments.models import PaymentGLMapping
 from apps.settings.models import Restaurant
+from apps.utils.rounding import money
 
 from .models import GLEntry, JournalEntry, JournalEntryAccount
 from .payables_models import SupplierInvoiceItem
@@ -156,7 +157,7 @@ def _cogs_legs(order, rows, settings):
         }
     if not per_account:
         return []
-    total_value = sum((row["debit"] for row in per_account.values()), Decimal("0")).quantize(TWO_PLACES)
+    total_value = money(sum((row["debit"] for row in per_account.values()), Decimal("0")))
     warehouse_account = _resolve_required_account(
         order.stock_warehouse.account if order.stock_warehouse_id else None,
         label="The warehouse account",
@@ -307,7 +308,7 @@ def _plug_round_off(rows, settings):
     """Put any debit/credit remainder on the round-off account so the batch balances."""
     debit = sum((row.get("debit") or Decimal("0") for row in rows), Decimal("0"))
     credit = sum((row.get("credit") or Decimal("0") for row in rows), Decimal("0"))
-    diff = (debit - credit).quantize(TWO_PLACES)
+    diff = money(debit - credit)
     if not diff:
         return rows
     account = _resolve_required_account(
@@ -381,8 +382,8 @@ def post_refund_gl(return_order):
         )
 
     for line in drink_returns:
-        restore_value = (abs(line.qty) * _current_wac_for_return(return_order, line.item)).quantize(TWO_PLACES)
-        settle_value = (abs(line.qty) * settle_time_rate(source, line.item)).quantize(TWO_PLACES)
+        restore_value = money(abs(line.qty) * _current_wac_for_return(return_order, line.item))
+        settle_value = money(abs(line.qty) * settle_time_rate(source, line.item))
         if not restore_value and not settle_value:
             continue
         expense = _resolve_required_account(unit_expense or default_expense, label="The default expense account")

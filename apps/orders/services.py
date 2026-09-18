@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.inventory.models import Bin, Item, StockLedgerEntry
 from apps.menu.models import MenuItem
 from apps.payments.models import ModeOfPayment, PaymentGLMapping
+from apps.utils.rounding import money
 
 from . import printing
 from .models import (
@@ -30,7 +31,6 @@ from .models import (
     TAKE_AWAY,
     TICKET_BAR,
     TICKET_KITCHEN,
-    TWO_PLACES,
     KOTItem,
     Order,
     OrderItem,
@@ -929,7 +929,7 @@ def _validate_payment_data(order, payments_data, opening_entry):
 
         try:
             amount = Decimal(str(entry.get("amount")))
-            if not amount.is_finite() or amount != amount.quantize(TWO_PLACES):
+            if not amount.is_finite() or amount != money(amount):
                 raise InvalidOperation
         except InvalidOperation, TypeError, ValueError:
             raise ValidationError(f"Payment row {row_number} has a malformed amount.") from None
@@ -1102,14 +1102,14 @@ def _refund_payment_shares(source, refund_total):
     if source_total <= 0:
         raise ValidationError("The source order has no refundable value.")
     ratio = refund_total / source_total
-    target = (net_sum * ratio).quantize(TWO_PLACES)
+    target = money(net_sum * ratio)
     shares = []
     remaining = target
     for index, (payment, net) in enumerate(nets):
         if index == len(nets) - 1:
             share = remaining
         else:
-            share = (target * net / net_sum).quantize(TWO_PLACES)
+            share = money(target * net / net_sum)
             remaining -= share
         if share:
             shares.append((payment, share))

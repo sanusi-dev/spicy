@@ -7,6 +7,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from apps.utils.models import BaseModel
+from apps.utils.rounding import money
 
 
 class Supplier(BaseModel):
@@ -309,7 +310,7 @@ class SupplierInvoiceItem(BaseModel):
         if self.rate is None:
             self.rate = Decimal("0")
         self.amount = Decimal(self.qty or Decimal("0")) * Decimal(self.rate)
-        self.amount = self.amount.quantize(Decimal("0.01"))
+        self.amount = money(self.amount)
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -372,7 +373,7 @@ class SupplierInvoiceExpense(BaseModel):
             invoice = self.invoice
             if invoice.pk and invoice.status != SupplierInvoice.DRAFT:
                 raise ValidationError("Only draft supplier invoices can have expenses added or edited.")
-        self.amount = Decimal(self.amount).quantize(Decimal("0.01"))
+        self.amount = money(self.amount)
         self.full_clean()
         super().save(*args, **kwargs)
 

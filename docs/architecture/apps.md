@@ -109,6 +109,7 @@
 
 - URLs/views/templates: none; it is a shared code package, not a separately installed app.
 - Models/forms: `BaseModel`, `StyledModelForm`, `active_choices`, `add_formset_row`/`remove_formset_row` (HTMX formset row endpoints rebuild bound formsets from posted data), and Tailwind widget constants in `utils/models.py` and `utils/forms.py`.
+- Rounding: `utils/rounding.py` owns every money mode — `money()` (2 dp, half-even), `cash_round()` (whole naira, half-up), `percent()` (3 dp, half-even), and the shared `TWO_PLACES` quantity constant.
 - Side effects: form initialization styles widgets and preserves current disabled choices in select querysets.
 
 ## Management Commands and Background Work

@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.accounting.models import FiscalYear
 from apps.inventory.services import compute_food_usage
+from apps.utils.rounding import money, percent
 
 from .models import (
     DRINKS,
@@ -23,7 +24,6 @@ from .models import (
     PnLRecurringExpense,
 )
 from .sources import (
-    TWO,
     ZERO,
     business_day_window,
     cash_variance,
@@ -35,13 +35,11 @@ from .sources import (
     sales_by_department,
 )
 
-THREE = Decimal("0.001")
-
 
 def _pct(amount, gross):
     if not gross:
         return ZERO
-    return ((amount / gross) * Decimal("100")).quantize(THREE)
+    return percent((amount / gross) * Decimal("100"))
 
 
 def _split(amount, department):
@@ -86,13 +84,13 @@ def compute_daily_pnl(pnl):
     start, end = business_day_window(pnl.business_date, config.business_day_start_hour)
     orders = orders_in_window(start, end)
     food, drinks = sales_by_department(orders)
-    gross = (food + drinks).quantize(TWO)
+    gross = money(food + drinks)
     round_off_amount = round_off(orders)
-    net = (gross + round_off_amount).quantize(TWO)
+    net = money(gross + round_off_amount)
     cogs_drinks, cogs_rows = drink_cogs(start, end, orders)
     usage = compute_food_usage(pnl.business_date)
     food_actual = usage.actual_cost
-    cogs = (food_actual + cogs_drinks).quantize(TWO)
+    cogs = money(food_actual + cogs_drinks)
     consumption_rows = []
     for item in usage.usages:
         if item.consumption_qty:
@@ -164,7 +162,7 @@ def compute_daily_pnl(pnl):
     for row in pnl.material_qtys.select_related("material").all():
         if row.qty <= 0:
             continue
-        amount = (row.qty * row.material.rate).quantize(TWO)
+        amount = money(row.qty * row.material.rate)
         _append(
             lines,
             LineSpec(DailyPnLLine.DIRECT, row.material.name, ZERO, ZERO, amount, source=DailyPnLLine.MATERIAL),
@@ -198,13 +196,13 @@ def compute_daily_pnl(pnl):
             direct_drinks += drinks_amt
             direct_total += total_amt
 
-    gp_food = (food - food_actual - direct_food).quantize(TWO)
-    gp_drinks = (drinks - cogs_drinks - direct_drinks).quantize(TWO)
-    gp = (net - cogs - direct_total).quantize(TWO)
+    gp_food = money(food - food_actual - direct_food)
+    gp_drinks = money(drinks - cogs_drinks - direct_drinks)
+    gp = money(net - cogs - direct_total)
     _append(lines, LineSpec(DailyPnLLine.GROSS_PROFIT, "Gross profit", gp_food, gp_drinks, gp))
 
     if pnl.employee_cost_override is not None:
-        employee_total = pnl.employee_cost_override.quantize(TWO)
+        employee_total = money(pnl.employee_cost_override)
         _append(
             lines,
             LineSpec(DailyPnLLine.EMPLOYEE, "Employee costs", ZERO, ZERO, employee_total, source=DailyPnLLine.SETTINGS),
@@ -223,10 +221,10 @@ def compute_daily_pnl(pnl):
             )
             employee_total += total_amt
 
-    prime = (cogs + employee_total).quantize(TWO)
+    prime = money(cogs + employee_total)
     _append(lines, LineSpec(DailyPnLLine.PRIME_COST, "Prime cost", food_actual, cogs_drinks, prime, is_memo=True))
 
-    depreciation = config.daily_depreciation.quantize(TWO)
+    depreciation = money(config.daily_depreciation)
     _append(
         lines,
         LineSpec(DailyPnLLine.DEPRECIATION, "Depreciation", ZERO, ZERO, depreciation, source=DailyPnLLine.SETTINGS),
@@ -264,7 +262,7 @@ def compute_daily_pnl(pnl):
         )
         indirect_total += total_amt
 
-    np = (gp - indirect_total).quantize(TWO)
+    np = money(gp - indirect_total)
     _append(lines, LineSpec(DailyPnLLine.NET_PROFIT, "Net profit", ZERO, ZERO, np))
     for spec in lines:
         spec.percent_of_gross = _pct(spec.amount_total, gross)
@@ -280,12 +278,12 @@ def compute_daily_pnl(pnl):
         "kitchen_consumption": food_actual,
         "theoretical_food_cost": usage.theoretical_cost,
         "food_cost_variance": usage.variance_cost,
-        "total_direct_expenses": direct_total.quantize(TWO),
+        "total_direct_expenses": money(direct_total),
         "gross_profit": gp,
-        "total_employee_costs": employee_total.quantize(TWO),
+        "total_employee_costs": money(employee_total),
         "depreciation": depreciation,
         "cash_variance": variance,
-        "total_indirect_expenses": indirect_total.quantize(TWO),
+        "total_indirect_expenses": money(indirect_total),
         "prime_cost": prime,
         "net_profit": np,
         "gross_sales_percent": _pct(gross, gross) if gross else ZERO,
@@ -328,7 +326,7 @@ def submit_daily_pnl(pnl, actor=None):
 
     for row in locked.material_qtys.select_related("material").all():
         rate = row.material.rate
-        DailyPnLMaterialQty.objects.filter(pk=row.pk).update(rate=rate, amount=(row.qty * rate).quantize(TWO))
+        DailyPnLMaterialQty.objects.filter(pk=row.pk).update(rate=rate, amount=money(row.qty * rate))
 
     locked.lines.all().delete()
     locked.cogs_rows.all().delete()

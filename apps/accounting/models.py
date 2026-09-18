@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
 from apps.utils.models import BaseModel
+from apps.utils.rounding import money
 
 
 class LedgerAccount(BaseModel):
@@ -221,7 +222,7 @@ class GLEntry(BaseModel):
         rows = list(rows)
         total_debit = sum((row.get("debit") or Decimal("0") for row in rows), Decimal("0"))
         total_credit = sum((row.get("credit") or Decimal("0") for row in rows), Decimal("0"))
-        if total_debit.quantize(Decimal("0.01")) != total_credit.quantize(Decimal("0.01")):
+        if money(total_debit) != money(total_credit):
             raise ValidationError("GL batch is not balanced (total debit must equal total credit).")
         with transaction.atomic():
             fiscal_year = FiscalYear.get_for(posting_date)
