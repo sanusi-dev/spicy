@@ -65,6 +65,12 @@ class PurchaseReceiptTest(TestCase):
         with self.assertRaisesMessage(ValidationError, "central Store"):
             submit_purchase_receipt(receipt)
 
+    def test_submit_rejects_zero_rate(self):
+        receipt = PurchaseReceipt.objects.create(supplier_name="Supplier", warehouse=self.store)
+        PurchaseReceiptItem.objects.create(purchase_receipt=receipt, item=self.item, received_qty=10, rate=0)
+        with self.assertRaisesMessage(ValidationError, "Rate for Rice must be greater than zero."):
+            submit_purchase_receipt(receipt)
+
     def test_submit_rejects_non_stock_non_purchase_disabled_and_template_items(self):
         for changes in (
             {"is_stock_item": False},

@@ -94,6 +94,18 @@ class StockEntryTest(TestCase):
         self.assertEqual(line.target_warehouse, self.store)
         self.assertEqual(Bin.objects.get(item=self.food, warehouse=self.store).actual_qty, Decimal("4"))
 
+    def test_receipt_rejects_zero_rate(self):
+        from apps.payments.models import ModeOfPayment, PaymentGLMapping
+
+        cash = ModeOfPayment.objects.create(name="Cash Zero", type="CASH", enabled=True)
+        PaymentGLMapping.objects.create(mode_of_payment=cash, default_account=self.accounts["cash"])
+        entry = StockEntry.objects.create(purpose="MATERIAL_RECEIPT", mode_of_payment=cash)
+        StockEntryDetail.objects.create(
+            stock_entry=entry, item=self.food, target_warehouse=self.store, qty=Decimal("4"), basic_rate=Decimal("0")
+        )
+        with self.assertRaisesMessage(ValidationError, "Rate for Rice must be greater than zero."):
+            submit_stock_entry(entry)
+
     def test_transfer_derives_department_targets_and_preserves_wac_rate(self):
         # WAC: store 2@100 + 3@200 => WAC 160. Transfer 3 at source WAC 160.
         StockLedgerEntry.create_entry(

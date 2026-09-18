@@ -644,6 +644,8 @@ class StockEntryDetail(BaseModel):
         if self.stock_entry.purpose == "MATERIAL_RECEIPT":
             if not item.is_purchase_item:
                 raise ValidationError(f"{item.item_name} is not purchasable.")
+            if (self.basic_rate or Decimal("0")) <= 0:
+                raise ValidationError(f"Rate for {item.item_name} must be greater than zero.")
             if item.department == "DRINKS":
                 if not (item.is_stock_item and item.is_sales_item and item.is_purchase_item):
                     raise ValidationError(f"{item.item_name} must be a stock-tracked, sellable, purchasable drink.")
@@ -903,8 +905,8 @@ class PurchaseReceiptItem(BaseModel):
     def validate_for_submission(self):
         if self.received_qty <= 0:
             raise ValidationError(f"Received quantity for {self.item.item_name} must be greater than zero.")
-        if self.rate < 0:
-            raise ValidationError(f"Rate for {self.item.item_name} cannot be negative.")
+        if self.rate <= 0:
+            raise ValidationError(f"Rate for {self.item.item_name} must be greater than zero.")
         if (
             self.item.disabled
             or self.item.has_variants

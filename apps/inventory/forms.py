@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.urls import reverse
@@ -251,6 +253,8 @@ class StockEntryDetailForm(InventoryModelForm):
         self.fields["basic_rate"].initial = None
         self.fields["basic_rate"].required = purpose != "MATERIAL_TRANSFER"
         self.fields["basic_rate"].widget.attrs["x-bind:disabled"] = "purpose === 'MATERIAL_TRANSFER'"
+        if purpose != "MATERIAL_TRANSFER":
+            self.fields["basic_rate"].min_value = Decimal("0.01")
         item = self._bound_item()
         self.fields["uom"].queryset = _uoms_for_item(item)
         if purpose == "MATERIAL_TRANSFER":
@@ -402,6 +406,7 @@ class PurchaseReceiptItemForm(InventoryModelForm):
             is_purchase_item=True,
         )
         self.fields["rate"].initial = None
+        self.fields["rate"].min_value = Decimal("0.01")
         item = self._bound_item()
         self.fields["uom"].queryset = _uoms_for_item(item)
         if item and not self.is_bound and not self.instance.uom_id:
