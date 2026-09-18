@@ -10,7 +10,7 @@ Prefix: `/backoffice/reports/` (`reports` namespace).
 
 ## Sales period
 
-Sales reports filter `Order.posting_date` as a calendar date. Today is `posting_date = today`. The Daily P&L business-day window does not apply; a late-night ticket can land on different days on the two surfaces.
+Sales reports filter `Order.posting_date` as a calendar date (the order's settlement date). Today is `posting_date = today`. The Daily P&L business-day window does not apply; a late-night ticket can land on different days on the two surfaces.
 
 Source is `Order.status=SUBMITTED` only. `DRAFT`, `CANCELLED`, and `DISCARDED` never count as sales. Returns (`is_return=True`) net off on the return's own `posting_date` as negative `grand_total` / `OrderItem.amount`. Net = gross (item amounts) + `rounding_adjustment` (equivalently `Sum(rounded_total)`). Refunded is the absolute value of return `grand_total`.
 

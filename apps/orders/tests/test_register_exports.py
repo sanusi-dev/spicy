@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.orders.models import Order
 from apps.orders.services import add_order_line, settle_order
 
 from .test_backoffice_views import BackofficeViewTestBase
@@ -75,9 +76,11 @@ class OrderRegisterExportTest(BackofficeViewTestBase):
     def test_date_range_filters_page_and_export(self):
         today = timezone.localdate()
         yesterday = today - timedelta(days=1)
-        older = self._create_order(posting_date=yesterday)
+        older = self._create_order()
         add_order_line(older, self.food_item, qty=1, rate=Decimal("1500"))
         settle_order(older, [{"mode_of_payment": self.cash.pk, "amount": "1500"}])
+        # Settlement stamps today's posting date; backdate it to exercise the filter.
+        Order.objects.filter(pk=older.pk).update(posting_date=yesterday)
         fresh = self._settled(qty=1)
         url = reverse("orders:order_list")
         response = self.client.get(url, {"from": today.isoformat(), "to": today.isoformat()})

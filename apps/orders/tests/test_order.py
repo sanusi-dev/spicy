@@ -1,4 +1,5 @@
 import threading
+from datetime import date, time
 from decimal import Decimal
 from unittest import skipUnless
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, connections, transaction
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
 from apps.inventory.models import UOM, Bin, Item, ItemGroup, StockLedgerEntry, Warehouse
 from apps.menu.models import Menu, MenuItem
@@ -288,6 +290,15 @@ class OrderSettleTest(OrderTestBase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, "SUBMITTED")
         self.assertTrue(self.order.is_paid)
+
+    def test_settle_stamps_posting_datetime_at_submission(self):
+        self.order.posting_date = date(2020, 1, 1)
+        self.order.posting_time = time(23, 50)
+        self.order.save(update_fields=["posting_date", "posting_time"])
+        settle_order(self.order, [{"mode_of_payment": self.cash.pk, "amount": "3000"}])
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.posting_date, timezone.localdate(self.order.submitted_at))
+        self.assertEqual(self.order.posting_time, timezone.localtime(self.order.submitted_at).time())
 
     def test_settle_accepts_electronic_payment_without_reference(self):
         bank = self._add_bank_mode()
@@ -615,6 +626,15 @@ class SubmitReturnTest(OrderTestBase):
         submit_return(return_order, actor=self.user)
         with self.assertRaises(ValidationError):
             submit_return(return_order, actor=self.user)
+
+    def test_submit_return_stamps_posting_datetime_at_submission(self):
+        order = self._settled_order()
+        return_order = make_return(order)
+        Order.objects.filter(pk=return_order.pk).update(posting_date=date(2020, 1, 1), posting_time=time(23, 50))
+        submit_return(return_order, actor=self.user)
+        return_order.refresh_from_db()
+        self.assertEqual(return_order.posting_date, timezone.localdate(return_order.submitted_at))
+        self.assertEqual(return_order.posting_time, timezone.localtime(return_order.submitted_at).time())
 
     def test_submit_return_rejects_non_return_draft(self):
         draft = self._create_order()

@@ -227,9 +227,11 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     locked.change_amount = max(total_paid - locked.grand_total, Decimal("0"))
     locked.is_paid = True
     locked.status = SUBMITTED
-    locked.submitted_at = timezone.now()
+    submitted_at = timezone.now()
+    locked.submitted_at = submitted_at
+    _stamp_submission(locked, submitted_at)
     locked.invoice_printed = True
-    locked.invoice_printed_at = timezone.now()
+    locked.invoice_printed_at = submitted_at
     locked.invoice_printed_by = cashier
     with _transition(locked, flag="_allow_submit"):
         locked.save()
@@ -348,6 +350,12 @@ def _transition(order, *, flag):
         yield
     finally:
         delattr(order, flag)
+
+
+def _stamp_submission(order, submitted_at):
+    """Move an order's posting date and time to the moment it is submitted."""
+    order.posting_date = timezone.localdate(submitted_at)
+    order.posting_time = timezone.localtime(submitted_at).time()
 
 
 @transaction.atomic
@@ -521,6 +529,10 @@ def submit_return(order, actor=None):
     for line in locked.items.select_related("item").all():
         line.full_clean()
     locked.recalculate_totals()
+    # Stamp before the stock restore so return SLEs share the submission date with GL.
+    submitted_at = timezone.now()
+    locked.submitted_at = submitted_at
+    _stamp_submission(locked, submitted_at)
 
     _restore_stock(locked, voucher_type="POS Return")
     refund_total = abs(locked.grand_total)
@@ -537,7 +549,6 @@ def submit_return(order, actor=None):
     locked.paid_amount = -sum((amount for _, amount in shares), Decimal("0"))
     locked.is_paid = False
     locked.status = SUBMITTED
-    locked.submitted_at = timezone.now()
     with _transition(locked, flag="_allow_submit"):
         locked.save()
     # Refund GL mirrors the source settle legs for the refunded portion,

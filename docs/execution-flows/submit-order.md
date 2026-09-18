@@ -17,6 +17,7 @@ Pay button
   -> ticket guarantee: if no KOTs exist, create and dispatch them (see below)
   -> create OrderPayment rows
   -> set paid/change/is_paid/status/submitted_at
+  -> re-stamp posting_date / posting_time to the settlement moment
   -> set invoice_printed / invoice_printed_at / invoice_printed_by
   -> convert DRINKS reservations to POS Order SLEs
   -> Order.audit("SUBMITTED")
@@ -24,6 +25,8 @@ Pay button
   -> print_receipt(order) — failure only warns; sale stands
   -> success message and redirect to POS home
 ```
+
+Settlement is the sale event, so it re-stamps `posting_date`/`posting_time` to the submission moment. The draft's creation stamps are provisional; the Daily P&L, GL, and sales reports then bucket a sale on the same day the shift close counted it.
 
 ## Validation Order
 
@@ -43,7 +46,7 @@ Payment inserts use nested savepoints to convert uniqueness errors to validation
 
 ## Return Submission
 
-A submitted return is a *separate* path (`orders.services.submit_return`), not a submission of the same document. It restores drink stock with positive SLEs (`voucher_type="POS Return"`) unless the line is marked not restockable, writes negative `OrderPayment` rows proportional to the source net tenders, sets `paid_amount` to the negative refund total, keeps `is_paid=False`, transitions the return draft to `SUBMITTED`, and audits `RETURN_SUBMITTED`. Return documents stay out of paid-sales revenue queries (`is_paid=True` filters and `OrderQuerySet.submitted_in_shift` exclude them); at shift close their refund rows reduce the expected drawer per mode.
+A submitted return is a *separate* path (`orders.services.submit_return`), not a submission of the same document. It re-stamps `posting_date`/`posting_time` to the submission moment, restores drink stock with positive SLEs (`voucher_type="POS Return"`) unless the line is marked not restockable, writes negative `OrderPayment` rows proportional to the source net tenders, sets `paid_amount` to the negative refund total, keeps `is_paid=False`, transitions the return draft to `SUBMITTED`, and audits `RETURN_SUBMITTED`. Return documents stay out of paid-sales revenue queries (`is_paid=True` filters and `OrderQuerySet.submitted_in_shift` exclude them); at shift close their refund rows reduce the expected drawer per mode.
 
 ## Important Difference from Older Feature Text
 

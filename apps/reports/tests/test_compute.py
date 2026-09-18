@@ -1,7 +1,8 @@
 """Daily P&L computation — window, sales, COGS, memos, templates, submit snapshot."""
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -32,23 +33,31 @@ class WindowTest(DailyPnLTestMixin, TestCase):
         cls._setup_pnl_world()
 
     def test_start_hour_6_puts_0100_on_previous_business_date(self):
-        from datetime import datetime as dt
-
         start, end = business_day_window(date(2026, 8, 19), 6)
-        one_am = timezone.make_aware(dt(2026, 8, 20, 1, 0))
+        one_am = timezone.make_aware(datetime(2026, 8, 20, 1, 0))
         self.assertTrue(start <= one_am < end)
         next_start, _ = business_day_window(date(2026, 8, 20), 6)
         self.assertFalse(one_am >= next_start)
 
-    def test_sales_follow_order_posting_datetime(self):
-        self.config.business_day_start_hour = 6
-        self.config.save()
-        order = self._create_order(posting_date=date.today() + timedelta(days=1), posting_time=time(1, 0))
+    def test_late_settlement_lands_on_the_settlement_business_date(self):
+        # Draft opened 23:50, settled 00:10 — the sale belongs to the business
+        # day it was paid on, not the day the order was opened.
+        draft_day = date(2026, 8, 19)
+        settled_at = timezone.make_aware(datetime(2026, 8, 20, 0, 10))
+        order = self._create_order(posting_date=draft_day, posting_time=time(23, 50))
         add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
-        self._settle(order)
-        pnl = self._draft(business_date=date.today())
-        computation = compute_daily_pnl(pnl)
-        self.assertEqual(computation.totals["gross_sales_food"], Decimal("1500"))
+        with patch("django.utils.timezone.now", return_value=settled_at):
+            self._settle(order)
+
+        order.refresh_from_db()
+        self.assertEqual(order.posting_date, date(2026, 8, 20))
+        self.assertEqual(order.posting_time, time(0, 10))
+        self.assertEqual(order.submitted_at, settled_at)
+
+        draft_pnl = compute_daily_pnl(self._draft(business_date=draft_day))
+        settled_pnl = compute_daily_pnl(self._draft(business_date=date(2026, 8, 20)))
+        self.assertEqual(draft_pnl.totals["gross_sales_food"], Decimal("0"))
+        self.assertEqual(settled_pnl.totals["gross_sales_food"], Decimal("1500"))
 
 
 class SalesAndCogsTest(DailyPnLTestMixin, TestCase):

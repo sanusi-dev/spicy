@@ -586,7 +586,7 @@ indirects (employee, templates, depreciation, cash variance, ad-hoc) → net pro
 `DailyPnLConsumptionRow`. One DRAFT and one SUBMITTED per `business_date`. Amend copies
 inputs into a new draft; cancel does not post GL.
 
-**Window:** `[business_date + start_hour, next day + start_hour)`. Orders by
+**Window:** `[business_date + start_hour, next day + start_hour)`. Orders by settlement-stamped
 `posting_date`+`posting_time`; consumption recs by `posting_date`; cash variance by
 `POSClosingEntry.period_end_date`.
 
@@ -602,7 +602,7 @@ override. Electricity optional (blank = ₦0).
 **Decisions:**
 
 - No new models. Query-based; no persistent aggregates. Manager/Admin only, same gate as Daily P&L. `apps/reports` owns all queries, views, and templates.
-- Sales period is calendar `posting_date`. Today is `posting_date = today`. The Daily P&L business-day window does not apply; late-night sales may land on different days in the two surfaces.
+- Sales period is calendar `posting_date` (stamped at settlement). Today is `posting_date = today`. The Daily P&L business-day window does not apply; late-night sales may land on different days in the two surfaces.
 - Sales source is `Order status=SUBMITTED` only. `DRAFT`, `CANCELLED`, and `DISCARDED` never count as sales. Returns (`is_return=True`) net off sales on the return's own `posting_date` as negative `grand_total` and negative `OrderItem.amount`; sales tables show a refunded-total column.
 - Every sales table carries FOOD / DRINKS / TOTAL from `OrderItem.department`. Net = gross + `rounding_adjustment`.
 - Today/daywise: filters `from`, `to`. One row per `posting_date`: bills, gross food, gross drinks, refunded total, net, rounding.

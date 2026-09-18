@@ -180,7 +180,7 @@ These are queried when `compute_daily_pnl()` runs. A draft's preview will change
 
 | Number | Source | Filter |
 |---|---|---|
-| Food / drinks sales | Submitted `OrderItem.amount` summed by `department`, falling back to the item's department when a line's snapshot is NULL (matching the GL income legs) | Orders whose `posting_date` + `posting_time` fall in the business-day window |
+| Food / drinks sales | Submitted `OrderItem.amount` summed by `department`, falling back to the item's department when a line's snapshot is NULL (matching the GL income legs) | Orders whose settlement-stamped `posting_date` + `posting_time` fall in the business-day window |
 | Round-off | Sum of `Order.rounding_adjustment` | Same orders |
 | Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add `qty × unit_rate`; restock returns (`POS Return`, qty > 0) subtract; non-restockable return lines add wastage |
 | Food COGS (actual) | Kitchen `CONSUMPTION` + `WASTE_DAMAGE` reconciliation SLEs via `inventory.services.compute_food_usage()` | Rec `posting_date` **equals** the P&L `business_date` (calendar date, not the hour window); `ADJUSTMENT` excluded |
@@ -299,13 +299,13 @@ Example with start hour **6**:
 Business date 19 Aug covers
   19 Aug 06:00  →  20 Aug 06:00  (end exclusive)
 
-An order posted 20 Aug 01:00 belongs to 19 Aug's P&L.
-An order posted 19 Aug 05:00 belongs to 18 Aug's P&L.
+An order settled (submitted) at 20 Aug 01:00 belongs to 19 Aug's P&L.
+An order settled at 19 Aug 05:00 belongs to 18 Aug's P&L.
 ```
 
 **What uses the window**
 
-- Orders: `posting_date` + `posting_time` (not `created_at`)
+- Orders: `posting_date` + `posting_time`, re-stamped at settlement (not the draft's creation stamps)
 - Cash variance: closing `period_end_date`
 
 **What uses the calendar date only**
