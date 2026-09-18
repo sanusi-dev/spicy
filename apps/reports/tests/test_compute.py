@@ -313,6 +313,18 @@ class ElectricityAndTemplatesTest(DailyPnLTestMixin, TestCase):
         rent = next(line for line in computation.lines if line.label == "Rent")
         self.assertEqual(rent.amount_total, Decimal("1000"))
 
+    def test_monthly_template_last_day_absorbs_rounding_remainder(self):
+        PnLRecurringExpense.objects.create(
+            name="Rent", kind=PnLRecurringExpense.INDIRECT_MONTHLY, amount=Decimal("10000")
+        )
+        mid = compute_daily_pnl(self._draft(business_date=date(2026, 9, 15)))
+        last = compute_daily_pnl(self._draft(business_date=date(2026, 9, 30)))
+        mid_rent = next(line for line in mid.lines if line.label == "Rent")
+        last_rent = next(line for line in last.lines if line.label == "Rent")
+        self.assertEqual(mid_rent.amount_total, Decimal("333.33"))
+        self.assertEqual(last_rent.amount_total, Decimal("333.43"))
+        self.assertEqual(mid_rent.amount_total * 29 + last_rent.amount_total, Decimal("10000.00"))
+
     def test_employee_override_replaces_templates(self):
         PnLRecurringExpense.objects.create(
             name="Wages", kind=PnLRecurringExpense.EMPLOYEE_DAILY, amount=Decimal("8000")

@@ -157,8 +157,12 @@ def recurring_amount(expense, business_date, gross_sales):
         PnLRecurringExpense.INDIRECT_DAILY,
         PnLRecurringExpense.EMPLOYEE_DAILY,
     }:
-        return expense.amount.quantize(TWO)
+        return money(expense.amount)
     if expense.kind in {PnLRecurringExpense.INDIRECT_MONTHLY, PnLRecurringExpense.EMPLOYEE_MONTHLY}:
         days = calendar.monthrange(business_date.year, business_date.month)[1]
-        return (expense.amount / Decimal(days)).quantize(TWO)
-    return ((expense.percent / Decimal("100")) * gross_sales).quantize(TWO)
+        daily = money(expense.amount / Decimal(days))
+        if business_date.day == days:
+            # The last day absorbs the rounding remainder so the month sums exactly.
+            return money(expense.amount - daily * (days - 1))
+        return daily
+    return money((expense.percent / Decimal("100")) * gross_sales)

@@ -347,10 +347,10 @@ Remembered lines that appear on every day's P&L until disabled.
 |---|---|
 | Direct — daily | `amount` as-is, in the direct section |
 | Indirect — daily | `amount` as-is, in the indirect section |
-| Indirect — monthly | `amount ÷ days_in_that_month` (August 31,000 ÷ 31 = 1,000) |
+| Indirect — monthly | `amount ÷ days_in_that_month` (August 31,000 ÷ 31 = 1,000); the last day absorbs the rounding remainder so the month sums to `amount` |
 | Indirect — % of gross | `percent/100 × gross_sales` |
 | Employee — daily | `amount` as-is, in the employee section |
-| Employee — monthly | `amount ÷ days_in_that_month`, employee section |
+| Employee — monthly | `amount ÷ days_in_that_month`, employee section; last day absorbs the remainder |
 
 Optional `department` (FOOD / DRINKS / blank). Blank means the naira sits on **Total** only.
 
