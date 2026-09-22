@@ -491,18 +491,22 @@ payment GL mappings only when those FKs are currently null.
 **Decisions:**
 
 - **Refund GL on return submit.** `submit_return` posts refund GL inside its own atomic block
-  after the return flips SUBMITTED. Legs are rebuilt from the returned lines (income per
-  returned amount, payment credits from the return's `OrderPayment` rows, drink COGS reversed
-  at the restore's current WAC), carrying the return's invoice number as
-  `voucher_type="Order"`. The batch is plugged to the round-off account so it cannot drift.
-  Restockable drink lines restore the bin via a "POS Return" SLE at current WAC; the SLE
-  records `SALE_RETURN` variance vs the original sale WAC (net COGS effect of refunding at
-  current WAC). Refund payments are proportional across the source net tenders
+  after the return flips SUBMITTED. Legs are rebuilt from the returned lines: the refunded
+  amount debits the per-department Sales Returns account (`ProductionUnit.sales_returns_account`
+  → `Restaurant.default_sales_returns_account`, failing closed when neither is set), payment
+  credits come from the return's `OrderPayment` rows, and drink COGS is credited at the source
+  sale's settle-time WAC. Restockable drink lines debit the warehouse at the same settle-time
+  WAC — no variance leg — and restore the bin via a "POS Return" SLE valued at that rate, so
+  stock and COGS reverse the sale exactly. The batch is plugged to the round-off account so it
+  cannot drift. Refund payments are proportional across the source net tenders
   (`refunded_total / source.grand_total`).
 - **Wastage.** Return lines flagged not-restockable skip the SLE restore. Their value posts
-  Dr `Restaurant.wastage_account` / Cr the returned line's warehouse account at current WAC,
-  keeping the physical bar stock and its ledger value in agreement. New
-  `OrderItem.not_restockable` Boolean (default False), settable only on return drafts.
+  Dr `Restaurant.wastage_account` / Cr the drink expense account at the settle-time WAC, with no
+  warehouse movement, moving the cost out of COGS and into wastage; the two accounts must
+  differ. New `OrderItem.not_restockable` Boolean (default False), settable only on return drafts.
+- **Payment mapping guard.** Payment modes cannot resolve to an income account; the check runs
+  when resolving the payment account, so a misconfigured mapping fails the posting instead of
+  netting the refund away.
 - **Partial returns.** Partiality is the return draft's negative quantities: lines can be
   reduced before submit (draft editing), and the existing cumulative-returned-quantity check
   against `return_against_item` stays authoritative. After a return is SUBMITTED, a new return
@@ -511,8 +515,11 @@ payment GL mappings only when those FKs are currently null.
 - **Permissions.** Return creation and submission remain Manager/Admin only.
 
 **Tests:** `submit_return` posts mirrored refund GL; partial return posts only the refunded
-portion; not-restockable lines post wastage and skip the SLE; second return against the same
-source is allowed after the first is SUBMITTED; cumulative qty cap still enforced.
+portion; restockable returns reverse stock and COGS at the settle-time WAC (no variance leg);
+refunds debit the per-department Sales Returns account and fail closed when it is unset;
+not-restockable lines post wastage and skip the SLE; second return against the same source is
+allowed after the first is SUBMITTED; cumulative qty cap still enforced; the seed wires the
+per-unit returns accounts.
 
 ### 4.4 Opening Balances and Go-Live Setup (Phase 6)
 
@@ -652,7 +659,7 @@ override. Electricity optional (blank = ₦0).
 - **D2 — Wastage = no warehouse.** Keep `WASTE_DAMAGE` as `StockReconciliation.reason` on a real warehouse, valued at current WAC → existing `Restaurant.wastage_account`.
 - **D3 — Opening stock entered rate seeds WAC.** `OPENING_STOCK` posts at user `valuation_rate`; if `Bin qty==0` and the adjustment adds stock, require `valuation_rate` to seed WAC; else current WAC. Opening Stock uses the matching `OPENING_STOCK` reconciliation reason; ordinary reconciliations use the operational reasons.
 - **D4 — GRN at receipt (accrual).** Receipt: `Dr SIH (warehouse asset) / Cr GRNI` @ receipt rate. Stock invoices must link a receipt via `SupplierInvoice.purchase_receipt` and post `Dr GRNI / Cr Payable` @ the same rate. Expense-only invoices need no receipt. No unlinked `Dr SIH / Cr Payable` path. Random market purchase without formal receipt uses `StockEntry MATERIAL_RECEIPT` → `Dr SIH / Cr the GL account mapped to the selected payment mode` directly (no GRNI, no invoice).
-- **D5 — Dedicated variance account** `Restaurant.inventory_price_variance_account` for **cancellation WAC drift only**. Sale-return variance posts to **COGS**: `variance = qty×(current WAC − original COGS rate)` → Dr COGS if positive, Cr COGS if negative. No `PURCHASE_PRICE` variance type.
+- **D5 — Dedicated variance account** `Restaurant.inventory_price_variance_account` for **cancellation WAC drift only**. Returns restore at the source sale's settle-time WAC and post no variance. No `PURCHASE_PRICE` variance type.
 - **D6 — Block receipt cancel if downstream financial doc active** — `SupplierInvoice(status=SUBMITTED, purchase_receipt=receipt)` OR `SupplierPayment` allocation against that invoice. Cancel chain: `Payment → Invoice → Receipt`.
 - **D7 — Clean slate migration.** No production data. `RunPython` wipes `StockLedgerEntry` + `Bin` (FIFO snapshots) + drops `stock_value, stock_queue, is_cancelled, qty_after_transaction` columns. Docs stay; bins rebuild.
 - **D8 — Backdated threshold** is report-only: `posting_date < created_at::date` labels "late entry" for humans; no valuation branch.
@@ -669,7 +676,7 @@ override. Electricity optional (blank = ₦0).
 - Transfer A→B: source `−qty×source_wac`, dest `+qty×source_wac` then dest recalculates WAC; net 0. Cancel: dest `−qty×dest_current_wac`, source `+qty×dest_current_wac`, source recalculates; net 0.
 - Reconciliation: `OPENING_STOCK` or `qty==0` + `+qty` → require entered `valuation_rate` to seed WAC; else current WAC.
 - Receipt cancellation (D6): blocked if downstream invoice/payment active; else `Cr SIH @ current WAC / Dr GRNI @ original` → diff to `variance_amount` (`CANCELLATION_WAC`) → `inventory_price_variance_account`. No partial.
-- Sale cancellation/return: `+qty×current WAC` back to Bin; diff vs original COGS → Dr/Cr COGS (sale-return variance in COGS, not variance account).
+- Return: `+qty×settle-time WAC` back to Bin, exactly reversing the sale's deduction; no variance leg.
 - Future-dated transactions rejected: `posting_date > today → ValidationError`.
 
 **GL entries:**
@@ -678,7 +685,7 @@ override. Electricity optional (blank = ₦0).
 - Linked invoice: `Dr GRNI / Cr Payable` @ same rate (rate equality enforced; no variance branch). Expense lines → `Dr Restaurant.default_supplier_expense_account / Cr Payable` (not part of GRNI).
 - Stock-entry market purchase (`MATERIAL_RECEIPT`): `Dr SIH / Cr the GL account mapped to the selected payment mode` directly — no GRNI, no invoice.
 - Receipt cancellation: `Cr SIH @ current WAC / Dr GRNI @ original` → difference to variance account (`CANCELLATION_WAC`).
-- Sale-return variance: `variance = qty×(current WAC − original COGS rate)` → Dr COGS if positive, Cr COGS if negative.
+- Return: restore at the source sale's settle-time WAC; no variance leg.
 
 **Settings:** `Restaurant.stock_received_but_not_billed_account` (GRNI, liability) + `Restaurant.inventory_price_variance_account` (expense). Seed defaults in `seed_chart_of_accounts`; forms validate required when inventory active.
 

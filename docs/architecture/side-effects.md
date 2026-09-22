@@ -31,7 +31,7 @@
 - Order line add/update/clear/cancel/discard/delete paths adjust `Bin.reserved_qty` for DRINKS.
 - Settlement creates `OrderPayment`, updates order totals/status, sets `invoice_printed*` (the receipt event), releases reservations, and creates negative POS SLE rows for drinks; the view then calls `printing.print_receipt(order)` non-blockingly.
 - Cancelling submitted orders creates positive stock reversal SLE rows and cancellation KOTs.
-- Return submission restores drink stock with positive `POS Return` SLEs (unless `not_restockable`), creates negative refund `OrderPayment` rows proportional to the source net tenders, sets a negative `paid_amount`, and the refund rows reduce the shift-close expected drawer.
+- Return submission restores drink stock with positive `POS Return` SLEs at the source sale's settle-time WAC (unless `not_restockable`), posts refund GL (per-department Sales Returns debit, payment credit, COGS reversal at the same WAC), creates negative refund `OrderPayment` rows proportional to the source net tenders, sets a negative `paid_amount`, and the refund rows reduce the shift-close expected drawer.
 - Creating tickets snapshots current order lines; printing changes only KOT print status after the print interface returns.
 - Shift close calculates payment totals from order payment rows (excluding returns) minus refunds, and links the opening entry to the closing entry.
 - Inventory submission creates SLE rows, updates Bins, and updates `Item.last_purchase_rate` where applicable.

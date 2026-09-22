@@ -39,9 +39,9 @@ Monthwise is fiscal year **or** from/to: custom dates win and clear the year sel
 
 | Report | URL name | Behaviour |
 |---|---|---|
-| General ledger | `gl_report` | Chronological `GLEntry` rows with debit, credit, running balance, voucher link, `is_cancelled` flag. Cancelled originals and reversals both display and net to zero. Filters: fiscal year, from/to, account. Running balance appears only when an account is selected, seeded by a brought-forward row from earlier entries in the same fiscal year. |
+| General ledger | `gl_report` | Chronological `GLEntry` rows with debit, credit, running balance, voucher link, `is_cancelled` flag. Cancelled originals and reversals both display; a reversal is dated the cancellation day, so originals and their mirrors net only when the range covers both. Filters: fiscal year, from/to, account. Running balance appears only when an account is selected, seeded by a brought-forward row from earlier entries in the same fiscal year. |
 | Trial balance | `trial_balance` | Cumulative `posting_date <= to` within the fiscal year, opening entries included. One row per leaf account with a non-zero balance, grouped by `account_type`. Debit total equals credit total. |
-| Simple P&L | `simple_pnl` | Sums `report_type=PROFIT_AND_LOSS` entries by account. Food vs drinks sales split using production-unit income accounts, falling back to the restaurant default income account when exactly one department has no unit account. Gross profit = total income. Net profit = income − expenses. Cancelled + reversals netted. No typed costs and no memos. |
+| Simple P&L | `simple_pnl` | Sums `report_type=PROFIT_AND_LOSS` entries by account. Food vs drinks sales split using production-unit income and sales-returns accounts, falling back to the restaurant default income/returns accounts when exactly one department has no unit account. Gross profit = total income. Net profit = income − expenses. Cancelled + reversals netted; reversals carry the cancellation date, so a range must cover both to net. No typed costs and no memos. |
 
 Queries live in `apps/reports/accounting_reports.py`. GL voucher links resolve Order, Journal Entry, Supplier Invoice, Supplier Payment, Purchase Receipt, Stock Entry, Stock Reconciliation, and Shift Cash-Out (to the related opening entry detail). There is no balance sheet.
 

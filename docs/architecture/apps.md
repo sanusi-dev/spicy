@@ -86,7 +86,7 @@
 - Models/forms: `LedgerAccount`, `FiscalYear`, `GLEntry`, `JournalEntry`, `JournalEntryAccount` in `accounting/models.py`; forms in `accounting/forms.py` (journal rows use an inline formset).
 - Services: `accounting/services.py` owns order settle GL (`post_order_gl`), cancellation reversal (`reverse_order_gl`), refund GL (`post_refund_gl`), and shift-close cash variance posting (`post_cash_variance_gl`).
 - Templates/frontend: `templates/backoffice/accounting/*`; the chart of accounts is a recursive tree with expand/collapse, opening journals go through a read-only review screen before submit, journal entries use the standard formset add/remove pattern, and GL entries are a filtered read-only table.
-- Side effects: `GLEntry` is immutable — reversal postings mark originals cancelled and write mirror rows. `reverse_order_gl` posts reversal rows on the day they occur (today, or the refund's posting date when passed), never on the original sale date. `JournalEntry.submit()` posts to the GL; `cancel()` posts reversals; `amend()` copies a cancelled entry into a new draft, once per cancelled entry.
+- Side effects: `GLEntry` is immutable — reversal postings mark originals cancelled and write mirror rows dated the cancellation day. `JournalEntry.submit()` posts to the GL; `cancel()` posts reversals dated today; `amend()` copies a cancelled entry into a new draft dated today, once per cancelled entry.
 - Management: `accounting/management/commands/seed_chart_of_accounts.py` idempotently seeds the chart and current fiscal year, and fills Restaurant/warehouse/production-unit/payment GL FKs only when they are currently null.
 
 ### `apps.reports`

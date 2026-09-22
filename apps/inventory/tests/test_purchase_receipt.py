@@ -1,8 +1,11 @@
+from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
+from apps.accounting.models import GLEntry
 from apps.inventory.forms import PurchaseReceiptItemForm
 from apps.inventory.models import (
     UOM,
@@ -144,3 +147,19 @@ class PurchaseReceiptTest(TestCase):
         self.assertEqual(stock_bin.actual_qty, Decimal("2"))
         self.assertEqual(stock_bin.valuation_rate, Decimal("150"))
         self.assertEqual(stock_bin.stock_value, Decimal("300"))
+
+    def test_cancel_dates_sle_and_gl_reversal_on_cancellation_day(self):
+        receipt = PurchaseReceipt.objects.create(
+            supplier_name="Supplier", warehouse=self.store, posting_date=date(2026, 1, 15)
+        )
+        PurchaseReceiptItem.objects.create(purchase_receipt=receipt, item=self.item, received_qty=2, rate=100)
+        submit_purchase_receipt(receipt)
+        cancel_purchase_receipt(receipt)
+        reversal_sle = StockLedgerEntry.objects.get(
+            voucher_type="Purchase Receipt Cancellation", voucher_no=str(receipt.pk)
+        )
+        reversal_gl = GLEntry.objects.filter(
+            voucher_type="Purchase Receipt", voucher_no=str(receipt.pk), is_cancelled=False
+        ).first()
+        self.assertEqual(reversal_sle.posting_date, timezone.localdate())
+        self.assertEqual(reversal_gl.posting_date, timezone.localdate())

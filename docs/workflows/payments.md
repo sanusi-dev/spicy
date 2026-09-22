@@ -13,7 +13,7 @@ Sale payment rows are `orders.OrderPayment`, linked to an Order and ModeOfPaymen
 
 `ModeOfPayment` has a conditional unique constraint allowing at most one default. Its `clean()` and `save()` prevent unsetting the only default. Payment views/forms provide login-protected CRUD. GL mapping deletion is POST-only; other ordinary form saves do not use an explicit service transaction.
 
-A GL mapping may only point at a leaf account that is not a sales income account: `PaymentGLMapping.clean()` rejects accounts used as `ProductionUnit.income_account` or the `Restaurant.default_income_account`, and the inverse checks on `Restaurant.clean()` and `ProductionUnit.clean()` reject pointing an income account at an already-mapped payment account. This is the config layer; `post_order_gl`/`post_refund_gl` still fail closed at posting time if an account ends up on both the debit and credit side of one voucher (such legs would otherwise net to zero and vanish from the GL).
+A GL mapping may only point at a leaf account that is not a sales account: `PaymentGLMapping.clean()` rejects accounts used as `ProductionUnit.income_account`, `ProductionUnit.sales_returns_account`, `Restaurant.default_income_account`, or `Restaurant.default_sales_returns_account`, and the inverse checks on `Restaurant.clean()` and `ProductionUnit.clean()` reject pointing a sales account at an already-mapped payment account. This is the config layer; at posting time `_resolve_payment_account` rejects any payment account that is an income account, and `post_order_gl`/`post_refund_gl` still fail closed if an account ends up on both the debit and credit side of one voucher (such legs would otherwise net to zero and vanish from the GL).
 
 ## Shift Opening
 

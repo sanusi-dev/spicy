@@ -59,6 +59,15 @@ class Restaurant(BaseModel):
         verbose_name="Default income account",
         help_text="The income account used for sales when no category or kitchen/bar account is set.",
     )
+    default_sales_returns_account = models.ForeignKey(
+        "accounting.LedgerAccount",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Default sales returns account",
+        help_text="The account used to reduce income on refunds when no kitchen/bar account is set.",
+    )
     default_expense_account = models.ForeignKey(
         "accounting.LedgerAccount",
         on_delete=models.PROTECT,
@@ -225,6 +234,16 @@ class Restaurant(BaseModel):
                         "and cannot record sales income.",
                     }
                 )
+        if self.default_sales_returns_account_id:
+            from apps.payments.models import PaymentGLMapping
+
+            if PaymentGLMapping.objects.filter(default_account_id=self.default_sales_returns_account_id).exists():
+                raise ValidationError(
+                    {
+                        "default_sales_returns_account": "This account is mapped to a payment mode "
+                        "and cannot record sales returns.",
+                    }
+                )
         if self.max_open_drafts < 1:
             raise ValidationError({"max_open_drafts": "The open-draft limit must be at least 1."})
         if self.default_warehouse_id and self.default_warehouse.disabled:
@@ -313,6 +332,15 @@ class ProductionUnit(BaseModel):
         verbose_name="Income account",
         help_text="The income account used for sales from this station.",
     )
+    sales_returns_account = models.ForeignKey(
+        "accounting.LedgerAccount",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Sales returns account",
+        help_text="The account debited when a sale from this station is refunded.",
+    )
     expense_account = models.ForeignKey(
         "accounting.LedgerAccount",
         on_delete=models.PROTECT,
@@ -342,6 +370,16 @@ class ProductionUnit(BaseModel):
             if PaymentGLMapping.objects.filter(default_account_id=self.income_account_id).exists():
                 raise ValidationError(
                     {"income_account": "This account is mapped to a payment mode and cannot record sales income."}
+                )
+        if self.sales_returns_account_id:
+            from apps.payments.models import PaymentGLMapping
+
+            if PaymentGLMapping.objects.filter(default_account_id=self.sales_returns_account_id).exists():
+                raise ValidationError(
+                    {
+                        "sales_returns_account": "This account is mapped to a payment mode "
+                        "and cannot record sales returns."
+                    }
                 )
 
         restaurant = Restaurant.load()

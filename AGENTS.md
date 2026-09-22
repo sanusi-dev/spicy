@@ -630,6 +630,7 @@ Every menu item belongs to `FOOD` or `DRINKS`. A single order can contain both. 
 Financial documents follow an immutable workflow:
 - Orders, payments, and stock ledger entries have a `status` field with choices `DRAFT`, `SUBMITTED`, `CANCELLED`.
 - Once submitted, records are never updated — only cancelled, which creates a reversal entry.
+- Reversals post on the cancellation date — corrections never rewrite the original period.
 - This gives an immutable audit trail.
 - Implement as: `status = models.CharField(choices=[DRAFT, SUBMITTED, CANCELLED])`
 

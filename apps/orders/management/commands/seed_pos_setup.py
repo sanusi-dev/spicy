@@ -17,7 +17,12 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        from apps.accounting.management.commands.seed_chart_of_accounts import Command as ChartSeed
+        from apps.accounting.management.commands.seed_chart_of_accounts import (
+            Command as ChartSeed,
+        )
+        from apps.accounting.management.commands.seed_chart_of_accounts import (
+            wire_production_unit_accounts,
+        )
         from apps.inventory.models import Warehouse
         from apps.menu.models import Menu, MenuItem
         from apps.payments.models import ModeOfPayment
@@ -75,6 +80,7 @@ class Command(BaseCommand):
                 "printer_cut_mode": "FULL_CUT",
             },
         )
+        wire_production_unit_accounts()
         self.stdout.write(self.style.SUCCESS("Production Units: Kitchen (FOOD), Bar (DRINKS)"))
 
         menu = Menu.objects.filter(enabled=True).first()

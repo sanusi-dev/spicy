@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounting.models import FiscalYear, GLEntry, JournalEntry, JournalEntryAccount, LedgerAccount
 
@@ -105,6 +106,7 @@ class JournalEntrySubmitTest(JournalEntryTestBase):
         self.assertEqual(originals.filter(is_cancelled=False).count(), 2)
         reversal = originals.filter(is_cancelled=False, account=self.cash).first()
         self.assertEqual(reversal.credit, Decimal("100"))
+        self.assertEqual(reversal.posting_date, timezone.localdate())
 
     def test_amend_from_cancelled(self):
         journal = self._journal()
@@ -115,6 +117,7 @@ class JournalEntrySubmitTest(JournalEntryTestBase):
         copy = journal.amend()
         self.assertEqual(copy.status, JournalEntry.DRAFT)
         self.assertEqual(copy.amended_from, journal)
+        self.assertEqual(copy.posting_date, timezone.localdate())
         self.assertEqual(copy.accounts.count(), 2)
         with self.assertRaisesMessage(ValidationError, "Only cancelled"):
             journal2 = self._journal()

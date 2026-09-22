@@ -74,10 +74,18 @@ class DailyPnLTestMixin:
         )
         cls.opening.submit()
         ProductionUnit.objects.create(
-            name="Kitchen", warehouse=cls.kitchen_wh, department="FOOD", income_account=cls.accounts["food_sales"]
+            name="Kitchen",
+            warehouse=cls.kitchen_wh,
+            department="FOOD",
+            income_account=cls.accounts["food_sales"],
+            sales_returns_account=cls.accounts["food_sales_returns"],
         )
         ProductionUnit.objects.create(
-            name="Bar", warehouse=cls.bar_wh, department="DRINKS", income_account=cls.accounts["drinks_sales"]
+            name="Bar",
+            warehouse=cls.bar_wh,
+            department="DRINKS",
+            income_account=cls.accounts["drinks_sales"],
+            sales_returns_account=cls.accounts["drinks_sales_returns"],
         )
         cls.config = PnLConfiguration.load()
 

@@ -5,14 +5,22 @@ from django.db.models import Q
 from apps.utils.models import BaseModel
 
 
-def _income_account_ids():
-    """Accounts credited as sales income by ProductionUnit defaults or the Restaurant default."""
+def _sales_account_ids():
+    """Accounts that record sales or reduce them on refunds — production units or Restaurant defaults."""
     from apps.settings.models import ProductionUnit, Restaurant
 
     ids = set(ProductionUnit.objects.filter(income_account__isnull=False).values_list("income_account_id", flat=True))
-    restaurant = Restaurant.objects.filter(default_income_account__isnull=False).first()
+    ids |= set(
+        ProductionUnit.objects.filter(sales_returns_account__isnull=False).values_list(
+            "sales_returns_account_id", flat=True
+        )
+    )
+    restaurant = Restaurant.objects.first()
     if restaurant is not None:
-        ids.add(restaurant.default_income_account_id)
+        if restaurant.default_income_account_id:
+            ids.add(restaurant.default_income_account_id)
+        if restaurant.default_sales_returns_account_id:
+            ids.add(restaurant.default_sales_returns_account_id)
     return ids
 
 
@@ -106,5 +114,5 @@ class PaymentGLMapping(BaseModel):
             raise ValidationError({"default_account": "A default GL account is required for the mapping."})
         if self.default_account_id and not self.default_account.is_leaf:
             raise ValidationError({"default_account": "Only leaf accounts can be mapped to payment modes."})
-        if self.default_account_id and self.default_account_id in _income_account_ids():
-            raise ValidationError({"default_account": "Payment modes cannot be mapped to a sales income account."})
+        if self.default_account_id and self.default_account_id in _sales_account_ids():
+            raise ValidationError({"default_account": "Payment modes cannot be mapped to a sales account."})

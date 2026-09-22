@@ -66,6 +66,18 @@ def setup_chart_of_accounts(restaurant):
         account_type=LedgerAccount.INCOME,
         report_type=LedgerAccount.PROFIT_AND_LOSS,
     )
+    food_sales_returns = LedgerAccount.objects.create(
+        name=f"Food Sales Returns {restaurant.pk}",
+        parent=income,
+        account_type=LedgerAccount.INCOME,
+        report_type=LedgerAccount.PROFIT_AND_LOSS,
+    )
+    drinks_sales_returns = LedgerAccount.objects.create(
+        name=f"Drinks Sales Returns {restaurant.pk}",
+        parent=income,
+        account_type=LedgerAccount.INCOME,
+        report_type=LedgerAccount.PROFIT_AND_LOSS,
+    )
     expenses = LedgerAccount.objects.create(
         name=f"Expenses {restaurant.pk}",
         is_group=True,
@@ -126,6 +138,12 @@ def setup_chart_of_accounts(restaurant):
         account_type=LedgerAccount.EXPENSE,
         report_type=LedgerAccount.PROFIT_AND_LOSS,
     )
+    wastage = LedgerAccount.objects.create(
+        name=f"Wastage {restaurant.pk}",
+        parent=expenses,
+        account_type=LedgerAccount.EXPENSE,
+        report_type=LedgerAccount.PROFIT_AND_LOSS,
+    )
     temporary_opening = LedgerAccount.objects.create(
         name=f"Temporary Opening {restaurant.pk}",
         parent=equity,
@@ -140,10 +158,11 @@ def setup_chart_of_accounts(restaurant):
     )
 
     restaurant.default_income_account = food_sales
+    restaurant.default_sales_returns_account = drinks_sales_returns
     restaurant.default_expense_account = cogs
     restaurant.round_off_account = round_off
     restaurant.account_for_change_amount = cash
-    restaurant.wastage_account = cogs
+    restaurant.wastage_account = wastage
     restaurant.cash_shortage_account = cogs
     restaurant.cash_over_short_account = round_off
     restaurant.default_payable_account = payable
@@ -165,11 +184,14 @@ def setup_chart_of_accounts(restaurant):
         "income": income,
         "food_sales": food_sales,
         "drinks_sales": drinks_sales,
+        "food_sales_returns": food_sales_returns,
+        "drinks_sales_returns": drinks_sales_returns,
         "expenses": expenses,
         "cogs": cogs,
         "stock_in_hand": stock_in_hand,
         "grni": grni,
         "variance": variance,
+        "wastage": wastage,
         "supplier_expense": supplier_expense,
         "round_off": round_off,
         "equity": equity,

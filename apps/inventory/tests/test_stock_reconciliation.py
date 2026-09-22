@@ -1,7 +1,9 @@
+from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounting.models import GLEntry
 from apps.inventory.forms import StockReconciliationForm, StockReconciliationItemForm
@@ -192,16 +194,19 @@ class StockReconciliationStandardizationTest(TestCase):
 
     def test_adjustment_cancel_reverses_gl(self):
         StockLedgerEntry.create_entry(self.rice, self.store, Decimal("10"), "Receipt", "A3", unit_rate=Decimal("100"))
-        rec = self.make_rec("ADJUSTMENT", warehouse=self.store)
+        rec = self.make_rec("ADJUSTMENT", warehouse=self.store, posting_date=date(2026, 1, 15))
         StockReconciliationItem.objects.create(reconciliation=rec, item=self.rice, qty=Decimal("6"))
         submit_stock_reconciliation(rec)
         cancel_stock_reconciliation(rec)
         self.assertEqual(Bin.objects.get(item=self.rice, warehouse=self.store).actual_qty, Decimal("10"))
-        self.assertTrue(
-            GLEntry.objects.filter(
-                voucher_type="Stock Reconciliation", voucher_no=str(rec.pk), remarks="Reversal"
-            ).exists()
+        reversal_gl = GLEntry.objects.filter(
+            voucher_type="Stock Reconciliation", voucher_no=str(rec.pk), remarks="Reversal"
+        ).first()
+        reversal_sle = StockLedgerEntry.objects.get(
+            voucher_type="Stock Reconciliation Cancellation", voucher_no=str(rec.pk)
         )
+        self.assertEqual(reversal_gl.posting_date, timezone.localdate())
+        self.assertEqual(reversal_sle.posting_date, timezone.localdate())
 
     # Consumption
 
@@ -287,7 +292,7 @@ class StockReconciliationStandardizationTest(TestCase):
         self.assertEqual(Bin.objects.get(item=self.rice, warehouse=self.store).actual_qty, Decimal("7"))
         entries = self.gl_for(rec)
         by_acct = {e.account_id: e for e in entries}
-        waste = by_acct[self.accounts["cogs"].pk]
+        waste = by_acct[self.accounts["wastage"].pk]
         self.assertEqual(waste.debit, Decimal("300"))
 
     def test_waste_above_on_hand_minus_reserved_rejected(self):

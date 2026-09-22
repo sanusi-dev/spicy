@@ -11,7 +11,7 @@ from apps.payments.models import PaymentGLMapping
 from apps.settings.models import Restaurant
 from apps.utils.rounding import money
 
-from .models import GLEntry, JournalEntry, JournalEntryAccount
+from .models import GLEntry, JournalEntry, JournalEntryAccount, LedgerAccount
 from .payables_models import SupplierInvoiceItem
 
 
@@ -57,6 +57,8 @@ def _resolve_payment_account(mode):
         raise ValidationError(f"Payment mode {mode.name}'s GL account ({account.name}) is disabled.")
     if not account.is_leaf:
         raise ValidationError(f"Payment mode {mode.name}'s GL account ({account.name}) must be a leaf account.")
+    if account.account_type == LedgerAccount.INCOME:
+        raise ValidationError(f"Payment mode {mode.name}'s GL account ({account.name}) is a sales account.")
     return account
 
 
@@ -89,6 +91,23 @@ def _income_legs(order, rows):
         per_account[account.pk] = {
             "account": account,
             "credit": per_account.get(account.pk, {}).get("credit", Decimal("0")) + amount,
+        }
+    return list(per_account.values())
+
+
+def _sales_returns_legs(order, settings):
+    """Build sales-returns GL rows keyed by resolved returns account, merging per account."""
+    default_returns = settings.default_sales_returns_account if settings else None
+    per_account = {}
+    for row in _order_lines_with_accounts(order):
+        amount = abs(row["line"].amount)
+        if not amount:
+            continue
+        account = _sales_returns_account_for(row["department"]) or default_returns
+        account = _resolve_required_account(account, label="The sales returns account")
+        per_account[account.pk] = {
+            "account": account,
+            "debit": per_account.get(account.pk, {}).get("debit", Decimal("0")) + amount,
         }
     return list(per_account.values())
 
@@ -203,7 +222,7 @@ def _ensure_disjoint_sides(rows):
     if clash:
         raise ValidationError(
             f"Account {'/'.join(clash)} appears on both sides of the posting — "
-            "check that no payment mode is mapped to a sales income account."
+            "check that no payment mode is mapped to a sales account."
         )
 
 
@@ -278,28 +297,27 @@ def _is_drink_line(line):
     return (line.department or getattr(line.item, "department", None)) == "DRINKS"
 
 
-def _current_wac_for_return(return_order, item):
-    """Current WAC at return time — from restore SLE or Bin."""
-    from apps.inventory.models import Bin, StockLedgerEntry
-    from apps.orders.services import settle_time_rate
+def _sales_returns_account_for(department):
+    """Resolve the sales returns account: ProductionUnit (by department) → Restaurant default."""
+    from apps.settings.models import ProductionUnit
 
-    restore = (
-        StockLedgerEntry.objects.filter(
-            voucher_type="POS Return",
-            voucher_no=str(return_order.pk),
-            item=item,
-            quantity__gt=0,
-        )
-        .order_by("-posting_date", "-posting_datetime", "-pk")
-        .first()
-    )
-    if restore is not None:
-        return restore.unit_rate
-    if return_order.stock_warehouse_id:
-        bin_obj = Bin.objects.filter(item=item, warehouse=return_order.stock_warehouse).first()
-        if bin_obj and bin_obj.valuation_rate:
-            return bin_obj.valuation_rate
-    return settle_time_rate(return_order.return_against, item)
+    unit = ProductionUnit.objects.filter(department=department).select_related("sales_returns_account").first()
+    if unit is not None and unit.sales_returns_account_id:
+        return unit.sales_returns_account
+    return None
+
+
+def _restore_value_for(return_order, line):
+    """Booked value of a return line's restore SLE — zero when the line was not restocked."""
+    from apps.inventory.models import StockLedgerEntry
+
+    sle = StockLedgerEntry.objects.filter(
+        voucher_type="POS Return",
+        voucher_no=str(return_order.pk),
+        voucher_detail_no=str(line.pk),
+        quantity__gt=0,
+    ).first()
+    return abs(sle.stock_value_change) if sle is not None else Decimal("0")
 
 
 def _plug_round_off(rows, settings):
@@ -345,12 +363,7 @@ def post_refund_gl(return_order):
 
     from apps.orders.services import settle_time_rate
 
-    rows = []
-    income_rows = _income_legs(return_order, _order_lines_with_accounts(return_order))
-    for row in income_rows:
-        amount = abs(row.get("credit") or row.get("debit") or Decimal("0"))
-        if amount:
-            rows.append({"account": row["account"], "debit": amount})
+    rows = _sales_returns_legs(return_order, settings)
 
     for payment in return_order.payments.select_related("mode_of_payment").all():
         amount = abs(payment.amount)
@@ -366,7 +379,6 @@ def post_refund_gl(return_order):
     unit_expense = _expense_account_for("DRINKS")
     warehouse_account = None
     wastage_account = None
-    variance_account = None
     drink_returns = [line for line in lines if _is_drink_line(line)]
     if drink_returns:
         warehouse_account = _resolve_required_account(
@@ -380,46 +392,23 @@ def post_refund_gl(return_order):
         )
 
     for line in drink_returns:
-        restore_value = money(abs(line.qty) * _current_wac_for_return(return_order, line.item))
-        settle_value = money(abs(line.qty) * settle_time_rate(source, line.item))
-        if not restore_value and not settle_value:
+        if line.not_restockable:
+            value = money(abs(line.qty) * settle_time_rate(source, line.item))
+        else:
+            # The GL mirrors the restore SLE's booked value so stock and COGS reverse exactly.
+            value = money(_restore_value_for(return_order, line))
+        if not value:
             continue
         expense = _resolve_required_account(unit_expense or default_expense, label="The default expense account")
-        rows.append({"account": expense, "credit": settle_value})
+        rows.append({"account": expense, "credit": value})
         if line.not_restockable:
-            rows.append({"account": warehouse_account, "debit": settle_value})
-            rows.append(
-                {
-                    "account": wastage_account,
-                    "debit": settle_value,
-                    "against": warehouse_account.name,
-                }
-            )
-            rows.append(
-                {
-                    "account": warehouse_account,
-                    "credit": settle_value,
-                    "against": wastage_account.name,
-                }
-            )
+            if wastage_account.pk == expense.pk:
+                raise ValidationError("Configure a wastage account that is separate from the drink expense account.")
+            rows.append({"account": wastage_account, "debit": value})
         else:
-            rows.append({"account": warehouse_account, "debit": restore_value})
-            # Stock side moves at the bin's current value while COGS unwinds at the
-            # sale's settle-time cost — the drift posts to the variance account.
-            diff = restore_value - settle_value
-            if diff:
-                if variance_account is None:
-                    variance_account = _resolve_required_account(
-                        settings.inventory_price_variance_account if settings else None,
-                        label="The inventory price variance account",
-                    )
-                if diff > 0:
-                    rows.append({"account": variance_account, "credit": diff})
-                else:
-                    rows.append({"account": variance_account, "debit": -diff})
+            rows.append({"account": warehouse_account, "debit": value})
 
-    # Wastage passthrough rows carry explicit against and legitimately touch one account on both sides.
-    _ensure_disjoint_sides([row for row in rows if not row.get("against")])
+    _ensure_disjoint_sides(rows)
     rows = _plug_round_off(_merge_rows(rows), settings)
     if not rows:
         return
@@ -536,8 +525,8 @@ def _payable_account_for(supplier, settings, label="The default payable account"
     return _resolve_required_account(account, label=label)
 
 
-def _reverse_gl(voucher_type, voucher_no, remarks="Reversal", posting_date=None):
-    """Mark a voucher's GL rows cancelled and post mirrored negated rows."""
+def _reverse_gl(voucher_type, voucher_no, remarks="Reversal"):
+    """Mark a voucher's GL rows cancelled and post mirrored negated rows dated today."""
     originals = list(GLEntry.objects.filter(voucher_type=voucher_type, voucher_no=voucher_no, is_cancelled=False))
     if not originals:
         return
@@ -545,7 +534,7 @@ def _reverse_gl(voucher_type, voucher_no, remarks="Reversal", posting_date=None)
         gl.is_cancelled = True
         gl.save(update_fields=["is_cancelled", "updated_at"])
     GLEntry.post(
-        posting_date=posting_date or timezone.localdate(),
+        posting_date=timezone.localdate(),
         rows=[
             {
                 "account": gl.account,
@@ -636,7 +625,7 @@ def post_supplier_invoice_gl(invoice):
 @transaction.atomic
 def cancel_supplier_invoice_gl(invoice):
     """Reverse the invoice's GL rows (mirrored negated rows, originals cancelled)."""
-    _reverse_gl("Supplier Invoice", invoice.invoice_number, posting_date=invoice.posting_date)
+    _reverse_gl("Supplier Invoice", invoice.invoice_number)
 
 
 @transaction.atomic
@@ -672,4 +661,4 @@ def post_supplier_payment_gl(payment):
 @transaction.atomic
 def cancel_supplier_payment_gl(payment):
     """Reverse the payment's GL rows (mirrored negated rows, originals cancelled)."""
-    _reverse_gl("Supplier Payment", payment.payment_number, posting_date=payment.posting_date)
+    _reverse_gl("Supplier Payment", payment.payment_number)

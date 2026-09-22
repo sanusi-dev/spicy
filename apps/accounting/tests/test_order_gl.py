@@ -83,10 +83,18 @@ class OrderGLTestBase(TestCase):
         )
         cls.opening.submit()
         cls.kitchen = ProductionUnit.objects.create(
-            name="Kitchen", warehouse=cls.kitchen_wh, department="FOOD", income_account=cls.accounts["food_sales"]
+            name="Kitchen",
+            warehouse=cls.kitchen_wh,
+            department="FOOD",
+            income_account=cls.accounts["food_sales"],
+            sales_returns_account=cls.accounts["food_sales_returns"],
         )
         cls.bar = ProductionUnit.objects.create(
-            name="Bar", warehouse=cls.bar_wh, department="DRINKS", income_account=cls.accounts["drinks_sales"]
+            name="Bar",
+            warehouse=cls.bar_wh,
+            department="DRINKS",
+            income_account=cls.accounts["drinks_sales"],
+            sales_returns_account=cls.accounts["drinks_sales_returns"],
         )
 
     def _create_order(self, **kwargs):
@@ -260,27 +268,30 @@ class RefundGLTest(OrderGLTestBase):
         ret.recalculate_totals()
         return ret
 
-    def test_drink_refund_posts_variance_credit_when_wac_rises(self):
+    def test_drink_refund_restores_at_settle_time_cost_when_wac_rises(self):
         drink, menu_item = self._clean_drink("Rising WAC Drink")
         ret = self._drink_return_draft(drink, menu_item, Decimal("700"))
         submit_return(ret, actor=self.user)
         ret.refresh_from_db()
         entries = self._order_gl(ret)
-        # Sale cost 300; bin re-blended to 500 → stock restores at 500 while COGS
-        # unwinds at the settle-time 300, with the 200 drift credited to variance.
+        # The return reverses the sale exactly: stock and COGS both move at the
+        # settle-time 300 even though the bin re-blended to 500.
         self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
-        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("500"))
-        self.assertEqual(entries.get(account=self.accounts["variance"]).credit, Decimal("200"))
+        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("300"))
+        self.assertEqual(entries.get(account=self.accounts["drinks_sales_returns"]).debit, Decimal("500"))
+        self.assertFalse(entries.filter(account=self.accounts["variance"]).exists())
+        sle = StockLedgerEntry.objects.get(voucher_type="POS Return", item=drink, quantity__gt=0)
+        self.assertEqual(sle.unit_rate, Decimal("300"))
 
-    def test_drink_refund_posts_variance_debit_when_wac_falls(self):
+    def test_drink_refund_restores_at_settle_time_cost_when_wac_falls(self):
         drink, menu_item = self._clean_drink("Falling WAC Drink")
         ret = self._drink_return_draft(drink, menu_item, Decimal("100"))
         submit_return(ret, actor=self.user)
         ret.refresh_from_db()
         entries = self._order_gl(ret)
         self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
-        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("200"))
-        self.assertEqual(entries.get(account=self.accounts["variance"]).debit, Decimal("100"))
+        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("300"))
+        self.assertFalse(entries.filter(account=self.accounts["variance"]).exists())
 
     def test_drink_refund_without_wac_drift_has_no_variance_leg(self):
         drink, menu_item = self._clean_drink("Stable WAC Drink")
@@ -309,11 +320,18 @@ class RefundGLTest(OrderGLTestBase):
         entries = self._order_gl(ret)
         self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
         self.assertEqual(entries.get(account=wastage).debit, Decimal("300"))
-        # Destroyed stock never re-enters: the SIH passthrough legs cancel out.
-        sih_net = sum(
-            (e.debit or Decimal("0")) - (e.credit or Decimal("0")) for e in entries.filter(account=self.bar_wh.account)
-        )
-        self.assertEqual(sih_net, Decimal("0"))
+        self.assertEqual(entries.get(account=self.accounts["drinks_sales_returns"]).debit, Decimal("500"))
+        # Destroyed stock never re-enters: the return does not touch the warehouse account.
+        self.assertFalse(entries.filter(account=self.bar_wh.account).exists())
+
+    def test_wastage_account_must_differ_from_expense_account(self):
+        self.restaurant.wastage_account = self.accounts["cogs"]
+        self.restaurant.save(update_fields=["wastage_account", "updated_at"])
+        drink, menu_item = self._clean_drink("Misconfigured Wastage Drink")
+        ret = self._drink_return_draft(drink, menu_item, Decimal("700"))
+        update_return_line(ret, ret.items.first().pk, not_restockable=True)
+        with self.assertRaisesMessage(ValidationError, "separate from the drink expense account"):
+            submit_return(ret, actor=self.user)
 
     def test_return_posts_mirrored_refund(self):
         order = self._create_order()
@@ -325,8 +343,22 @@ class RefundGLTest(OrderGLTestBase):
         ret.refresh_from_db()
         entries = self._order_gl(ret)
         self.assertEqual(entries.count(), 2)
-        self.assertEqual(entries.get(account=self.accounts["food_sales"]).debit, Decimal("1500"))
+        self.assertEqual(entries.get(account=self.accounts["food_sales_returns"]).debit, Decimal("1500"))
         self.assertEqual(entries.get(account=self.accounts["cash"]).credit, Decimal("1500"))
+
+    def test_return_fails_closed_without_returns_account(self):
+        self.restaurant.default_sales_returns_account = None
+        self.restaurant.save(update_fields=["default_sales_returns_account", "updated_at"])
+        self.kitchen.sales_returns_account = None
+        self.kitchen.save(update_fields=["sales_returns_account", "updated_at"])
+        order = self._create_order()
+        add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
+        self._settle(order)
+        ret = make_return(order)
+        ret.recalculate_totals()
+        with self.assertRaisesMessage(ValidationError, "sales returns account"):
+            submit_return(ret, actor=self.user)
+        self.assertFalse(self._order_gl(ret).exists())
 
     def test_drink_return_reverses_bar_unit_expense(self):
         from apps.accounting.models import LedgerAccount
@@ -370,7 +402,7 @@ class RefundGLTest(OrderGLTestBase):
         submit_return(ret, actor=self.user)
         ret.refresh_from_db()
         entries = self._order_gl(ret)
-        self.assertEqual(entries.get(account=self.accounts["food_sales"]).debit, Decimal("1500"))
+        self.assertEqual(entries.get(account=self.accounts["food_sales_returns"]).debit, Decimal("1500"))
 
     def test_second_return_after_first_submitted(self):
         order = self._create_order()
@@ -406,7 +438,7 @@ class SameAccountCollisionTest(OrderGLTestBase):
         PaymentGLMapping.objects.filter(mode_of_payment=self.cash).update(default_account=self.accounts["food_sales"])
         order = self._create_order()
         add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
-        with self.assertRaisesMessage(ValidationError, "both sides"):
+        with self.assertRaisesMessage(ValidationError, "sales account"):
             self._settle(order)
         self.assertFalse(self._order_gl(order).exists())
 
@@ -417,7 +449,7 @@ class SameAccountCollisionTest(OrderGLTestBase):
         ret = make_return(order)
         ret.recalculate_totals()
         PaymentGLMapping.objects.filter(mode_of_payment=self.cash).update(default_account=self.accounts["food_sales"])
-        with self.assertRaisesMessage(ValidationError, "both sides"):
+        with self.assertRaisesMessage(ValidationError, "sales account"):
             submit_return(ret, actor=self.user)
         self.assertFalse(self._order_gl(ret).exists())
 

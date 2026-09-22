@@ -1,7 +1,9 @@
+from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.inventory.forms import StockEntryDetailForm, StockEntryForm
 from apps.inventory.models import (
@@ -147,6 +149,61 @@ class StockEntryTest(TestCase):
         )
         self.assertEqual(food_in.unit_rate, Decimal("160"))
 
+    def test_transfer_posts_sih_legs_and_cancel_mirrors_them(self):
+        from apps.accounting.models import GLEntry, LedgerAccount
+
+        store_account = LedgerAccount.objects.create(
+            name="SIH Store transfer test",
+            parent=self.accounts["assets"],
+            account_type=LedgerAccount.ASSET,
+            report_type=LedgerAccount.BALANCE_SHEET,
+        )
+        kitchen_account = LedgerAccount.objects.create(
+            name="SIH Kitchen transfer test",
+            parent=self.accounts["assets"],
+            account_type=LedgerAccount.ASSET,
+            report_type=LedgerAccount.BALANCE_SHEET,
+        )
+        self.store.account = store_account
+        self.store.save(update_fields=["account", "updated_at"])
+        self.kitchen.account = kitchen_account
+        self.kitchen.save(update_fields=["account", "updated_at"])
+        StockLedgerEntry.create_entry(
+            item=self.food,
+            warehouse=self.store,
+            quantity=Decimal("2"),
+            voucher_type="Opening",
+            voucher_no="T1",
+            unit_rate=Decimal("100"),
+        )
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER", posting_date=date(2026, 1, 15))
+        StockEntryDetail.objects.create(stock_entry=entry, item=self.food, qty=Decimal("2"))
+        submit_stock_entry(entry)
+
+        legs = GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk), is_cancelled=False)
+        self.assertEqual(legs.filter(account=kitchen_account, debit=Decimal("200")).count(), 1)
+        self.assertEqual(legs.filter(account=store_account, credit=Decimal("200")).count(), 1)
+
+        # A later receipt lifts the destination WAC to 200; cancellation pulls the
+        # stock back at the destination's current WAC.
+        StockLedgerEntry.create_entry(
+            item=self.food,
+            warehouse=self.kitchen,
+            quantity=Decimal("2"),
+            voucher_type="Opening",
+            voucher_no="T2",
+            unit_rate=Decimal("300"),
+        )
+        cancel_stock_entry(entry)
+
+        self.assertEqual(
+            GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk), is_cancelled=True).count(), 2
+        )
+        reversal = GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk), is_cancelled=False)
+        self.assertEqual(reversal.filter(account=store_account, debit=Decimal("400")).count(), 1)
+        self.assertEqual(reversal.filter(account=kitchen_account, credit=Decimal("400")).count(), 1)
+        self.assertEqual(reversal.first().posting_date, timezone.localdate())
+
     def test_transfer_rejects_override_and_negative_store(self):
         entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
         line = StockEntryDetail.objects.create(
@@ -203,7 +260,7 @@ class StockEntryTest(TestCase):
             voucher_no="2",
             unit_rate=Decimal("300"),
         )
-        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER", posting_date=date(2026, 1, 15))
         StockEntryDetail.objects.create(stock_entry=entry, item=self.food, qty=Decimal("1"))
         submit_stock_entry(entry)
 
@@ -214,6 +271,7 @@ class StockEntryTest(TestCase):
         source_reversal = reversals.get(warehouse=self.store)
         self.assertEqual(target_reversal.unit_rate, Decimal("200"))
         self.assertEqual(target_reversal.quantity, Decimal("-1"))
+        self.assertEqual(target_reversal.posting_date, timezone.localdate())
         # Source reversal inbound at dest WAC 200
         self.assertEqual(source_reversal.unit_rate, Decimal("200"))
         self.assertEqual(source_reversal.quantity, Decimal("1"))

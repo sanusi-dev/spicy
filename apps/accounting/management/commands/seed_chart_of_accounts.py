@@ -14,6 +14,33 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 
+def wire_production_unit_accounts():
+    """Wire each unit to its department's income, sales-returns, and expense accounts."""
+    from apps.accounting.models import LedgerAccount
+    from apps.settings.models import ProductionUnit
+
+    by_name = {account.name: account for account in LedgerAccount.objects.filter(is_group=False)}
+    for unit in ProductionUnit.objects.all():
+        if unit.department == ProductionUnit.FOOD:
+            income, returns, expense = "Food Sales", "Food Sales Returns", "Food COGS"
+        elif unit.department == ProductionUnit.DRINKS:
+            income, returns, expense = "Drinks Sales", "Drinks Sales Returns", None
+        else:
+            continue
+        changed = []
+        if not unit.income_account_id and by_name.get(income):
+            unit.income_account = by_name[income]
+            changed.append("income_account")
+        if not unit.sales_returns_account_id and by_name.get(returns):
+            unit.sales_returns_account = by_name[returns]
+            changed.append("sales_returns_account")
+        if expense and not unit.expense_account_id and by_name.get(expense):
+            unit.expense_account = by_name[expense]
+            changed.append("expense_account")
+        if changed:
+            unit.save(update_fields=[*changed, "updated_at"])
+
+
 class Command(BaseCommand):
     help = "Seed the chart of accounts, fiscal year, and GL wiring."
 
@@ -22,7 +49,7 @@ class Command(BaseCommand):
         from apps.accounting.models import FiscalYear, LedgerAccount
         from apps.inventory.models import Warehouse
         from apps.payments.models import ModeOfPayment, PaymentGLMapping
-        from apps.settings.models import ProductionUnit, Restaurant
+        from apps.settings.models import Restaurant
 
         assets = LedgerAccount.objects.get_or_create(
             name="Assets",
@@ -86,6 +113,24 @@ class Command(BaseCommand):
                 "report_type": LedgerAccount.PROFIT_AND_LOSS,
             },
         )[0]
+        food_sales_returns = LedgerAccount.objects.get_or_create(
+            name="Food Sales Returns",
+            defaults={
+                "parent": income,
+                "is_group": False,
+                "account_type": LedgerAccount.INCOME,
+                "report_type": LedgerAccount.PROFIT_AND_LOSS,
+            },
+        )[0]
+        drinks_sales_returns = LedgerAccount.objects.get_or_create(
+            name="Drinks Sales Returns",
+            defaults={
+                "parent": income,
+                "is_group": False,
+                "account_type": LedgerAccount.INCOME,
+                "report_type": LedgerAccount.PROFIT_AND_LOSS,
+            },
+        )[0]
 
         expenses = LedgerAccount.objects.get_or_create(
             name="Expenses",
@@ -115,6 +160,15 @@ class Command(BaseCommand):
         )[0]
         food_cogs = LedgerAccount.objects.get_or_create(
             name="Food COGS",
+            defaults={
+                "parent": expenses,
+                "is_group": False,
+                "account_type": LedgerAccount.EXPENSE,
+                "report_type": LedgerAccount.PROFIT_AND_LOSS,
+            },
+        )[0]
+        wastage = LedgerAccount.objects.get_or_create(
+            name="Wastage",
             defaults={
                 "parent": expenses,
                 "is_group": False,
@@ -153,20 +207,7 @@ class Command(BaseCommand):
         # Wire production units, warehouses, and the Restaurant singleton.
         # Bar COGS keeps falling back to the default expense account (Cost of
         # Goods Sold); only the Kitchen gets a dedicated Food COGS leaf.
-        for unit in ProductionUnit.objects.all():
-            changed = []
-            if not unit.income_account_id:
-                if unit.department == ProductionUnit.FOOD:
-                    unit.income_account = food_sales
-                elif unit.department == ProductionUnit.DRINKS:
-                    unit.income_account = drinks_sales
-                if unit.income_account_id:
-                    changed.append("income_account")
-            if unit.department == ProductionUnit.FOOD and not unit.expense_account_id:
-                unit.expense_account = food_cogs
-                changed.append("expense_account")
-            if changed:
-                unit.save(update_fields=[*changed, "updated_at"])
+        wire_production_unit_accounts()
 
         # Inventory stock leaves per warehouse (credited at settle-time COGS).
         stock_group = LedgerAccount.objects.get_or_create(
@@ -290,7 +331,7 @@ class Command(BaseCommand):
                 ("default_expense_account", cogs),
                 ("round_off_account", round_off),
                 ("account_for_change_amount", cash_account),
-                ("wastage_account", cogs),
+                ("wastage_account", wastage),
                 ("cash_shortage_account", cogs),
                 ("cash_over_short_account", round_off),
                 ("default_payable_account", payable_account),
@@ -324,9 +365,11 @@ class Command(BaseCommand):
         self.stdout.write(f"  Cash account: {cash_account.name}")
         self.stdout.write(f"  Electronic account: {electronic_account.name}")
         self.stdout.write(f"  Income: {food_sales.name} / {drinks_sales.name}")
+        self.stdout.write(f"  Sales returns: {food_sales_returns.name} / {drinks_sales_returns.name}")
         self.stdout.write(f"  GRNI: {grni_account.name}")
         self.stdout.write(f"  Supplier expenses: {supplier_expense_account.name}")
         self.stdout.write(f"  Variance: {variance_account.name}")
         self.stdout.write(f"  Food COGS: {food_cogs.name}")
+        self.stdout.write(f"  Wastage: {wastage.name}")
         self.stdout.write(f"  Stock adjustments: {stock_adjustment_account.name}")
         self.stdout.write(f"  Temporary opening: {temporary_opening_account.name}")

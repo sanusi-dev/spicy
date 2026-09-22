@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.utils import timezone
 
 from apps.utils.models import BaseModel
 from apps.utils.rounding import money
@@ -393,7 +394,7 @@ class JournalEntry(BaseModel):
 
     @transaction.atomic
     def cancel(self):
-        """Cancel a submitted entry — post mirrored negated GL rows and mark originals cancelled."""
+        """Cancel a submitted entry — post mirrored negated GL rows (dated today) and mark originals cancelled."""
         locked = type(self).objects.select_for_update().get(pk=self.pk)
         if locked.status == self.CANCELLED:
             return
@@ -405,7 +406,7 @@ class JournalEntry(BaseModel):
             gl.is_cancelled = True
             gl.save(update_fields=["is_cancelled", "updated_at"])
         GLEntry.post(
-            posting_date=locked.posting_date,
+            posting_date=timezone.localdate(),
             rows=[
                 {
                     "account": row.account,
@@ -427,7 +428,7 @@ class JournalEntry(BaseModel):
             del locked._allow_cancel
 
     def amend(self):
-        """Create a new DRAFT copy of a CANCELLED entry, linked via amended_from."""
+        """Create a new DRAFT copy of a CANCELLED entry, dated today, linked via amended_from."""
         persisted = type(self).objects.only("status").get(pk=self.pk)
         if persisted.status != self.CANCELLED:
             raise ValidationError("Only cancelled journal entries can be amended.")
@@ -435,7 +436,7 @@ class JournalEntry(BaseModel):
             raise ValidationError("This journal entry has already been amended.")
         copy = JournalEntry.objects.create(
             voucher_type=self.voucher_type,
-            posting_date=self.posting_date,
+            posting_date=timezone.localdate(),
             reference_no=self.reference_no,
             reference_date=self.reference_date,
             remark=self.remark,

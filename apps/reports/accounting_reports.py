@@ -269,12 +269,23 @@ def _sales_account_ids():
         if unit.department in (FOOD, DRINKS):
             mapping[unit.income_account_id] = unit.department
             mapped_depts.add(unit.department)
+    for unit in ProductionUnit.objects.filter(sales_returns_account_id__isnull=False).only(
+        "department", "sales_returns_account_id"
+    ):
+        if unit.department in (FOOD, DRINKS):
+            mapping[unit.sales_returns_account_id] = unit.department
     missing = {FOOD, DRINKS} - mapped_depts
     if len(missing) == 1:
         restaurant = Restaurant.load()
-        default_id = restaurant.default_income_account_id if restaurant else None
-        if default_id and default_id not in mapping:
-            mapping[default_id] = next(iter(missing))
+        if restaurant is not None:
+            department = next(iter(missing))
+            if restaurant.default_income_account_id and restaurant.default_income_account_id not in mapping:
+                mapping[restaurant.default_income_account_id] = department
+            if (
+                restaurant.default_sales_returns_account_id
+                and restaurant.default_sales_returns_account_id not in mapping
+            ):
+                mapping[restaurant.default_sales_returns_account_id] = department
     return mapping
 
 

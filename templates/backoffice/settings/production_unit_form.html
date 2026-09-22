@@ -23,7 +23,7 @@
       </div>
       <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
         {% for field in form %}
-          {% if field.name == "name" or field.name == "department" or field.name == "warehouse" or field.name == "income_account" or field.name == "expense_account" %}
+          {% if field.name == "name" or field.name == "department" or field.name == "warehouse" or field.name == "income_account" or field.name == "sales_returns_account" or field.name == "expense_account" %}
             {% include "backoffice/components/form_field.html" with field=field %}
           {% endif %}
         {% endfor %}

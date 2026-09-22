@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounting.models import GLEntry, LedgerAccount
 from apps.accounting.payables_models import (
@@ -260,6 +261,20 @@ class SupplierInvoiceSubmitTest(PayablesTestBase):
         self.assertEqual(reversals.count(), 2)
         self.assertEqual(reversals.get(account=self.accounts["grni"]).credit, Decimal("200"))
         self.assertEqual(reversals.get(account=self.accounts["payable"]).debit, Decimal("200"))
+
+    def test_cancel_dates_reversal_on_cancellation_day(self):
+        invoice = self._make_receipt_invoice(posting_date=date(2026, 1, 15))
+        invoice.submit()
+        invoice.cancel()
+        reversal = GLEntry.objects.get(
+            voucher_type="Supplier Invoice",
+            voucher_no=invoice.invoice_number,
+            is_cancelled=False,
+            remarks="Reversal",
+            account=self.accounts["grni"],
+        )
+        self.assertEqual(reversal.posting_date, timezone.localdate())
+        self.assertNotEqual(reversal.posting_date, invoice.posting_date)
 
 
 class SupplierPaymentTest(PayablesTestBase):

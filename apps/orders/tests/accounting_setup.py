@@ -34,7 +34,7 @@ class OrderAccountingMixin:
         cls.restaurant.default_expense_account = cls.accounts["cogs"]
         cls.restaurant.round_off_account = cls.accounts["round_off"]
         cls.restaurant.account_for_change_amount = cls.accounts["cash"]
-        cls.restaurant.wastage_account = cls.accounts["cogs"]
+        cls.restaurant.wastage_account = cls.accounts["wastage"]
         cls.restaurant.cash_shortage_account = cls.accounts["cogs"]
         cls.restaurant.cash_over_short_account = cls.accounts["round_off"]
         cls.restaurant.save()

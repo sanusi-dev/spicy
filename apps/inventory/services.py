@@ -432,16 +432,25 @@ def submit_stock_entry(entry):
                 posting_date=locked.posting_date,
                 bin_obj=locked_bins[(detail.item_id, target.pk)],
             )
+            # GL: move value between the two warehouse SIH accounts at the transfer
+            # rate. Warehouses sharing one account net to zero, so skip the legs.
+            value = money(abs(outgoing.stock_value_change))
+            if value:
+                store_account = _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account")
+                target_account = _resolve_account(target.account, f"The {target.name} warehouse account")
+                if store_account.pk != target_account.pk:
+                    gl_rows.append({"account": target_account, "debit": value})
+                    gl_rows.append({"account": store_account, "credit": value})
         detail.save(update_fields=["source_warehouse", "target_warehouse", "updated_at"])
     if updated_items:
         Item.objects.bulk_update(updated_items, ["last_purchase_rate", "updated_at"])
-    if gl_rows and locked.purpose == "MATERIAL_RECEIPT":
+    if gl_rows:
         _post_gl_rows(
             locked.posting_date,
             "Stock Entry",
             voucher_no,
             gl_rows,
-            f"Stock Entry {voucher_no} MATERIAL_RECEIPT",
+            f"Stock Entry {voucher_no} {locked.purpose}",
         )
     locked.status = "SUBMITTED"
     locked.save(update_fields=["status", "updated_at"])
@@ -491,6 +500,7 @@ def cancel_stock_entry(entry):
             )
             .order_by("item_id", "warehouse_id")
         }
+        reversal_rows = []
         for detail in details:
             tgt = targets.get(detail.item.department)
             if not tgt:
@@ -519,7 +529,7 @@ def cancel_stock_entry(entry):
                 ),
                 None,
             )
-            StockLedgerEntry._create_entry_locked(
+            dest_reversal = StockLedgerEntry._create_entry_locked(
                 item=detail.item,
                 warehouse=tgt,
                 quantity=-detail.qty,
@@ -528,7 +538,7 @@ def cancel_stock_entry(entry):
                 unit_rate=None,
                 voucher_detail_no=str(detail.pk),
                 prevent_negative=True,
-                posting_date=locked.posting_date,
+                posting_date=timezone.localdate(),
                 reversal_of_sle_id=orig_dest.pk if orig_dest else None,
                 bin_obj=dest_bin,
             )
@@ -541,10 +551,35 @@ def cancel_stock_entry(entry):
                 unit_rate=dest_wac,
                 voucher_detail_no=str(detail.pk),
                 prevent_negative=False,
-                posting_date=locked.posting_date,
+                posting_date=timezone.localdate(),
                 reversal_of_sle_id=orig_store.pk if orig_store else None,
                 bin_obj=store_bin,
             )
+            # GL: mirror the reversal between the two SIH accounts at the
+            # destination's current WAC. Shared accounts net to zero.
+            value = money(abs(dest_reversal.stock_value_change))
+            if value and restaurant.store_warehouse.account_id != tgt.account_id:
+                reversal_rows.append(
+                    {
+                        "account": _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account"),
+                        "debit": value,
+                    }
+                )
+                reversal_rows.append(
+                    {
+                        "account": _resolve_account(tgt.account, f"The {tgt.name} warehouse account"),
+                        "credit": value,
+                    }
+                )
+        gl_originals = list(
+            GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=voucher_no, is_cancelled=False)
+        )
+        if gl_originals:
+            for gl in gl_originals:
+                gl.is_cancelled = True
+                gl.save(update_fields=["is_cancelled", "updated_at"])
+            if reversal_rows:
+                _post_gl_rows(timezone.localdate(), "Stock Entry", voucher_no, reversal_rows, "Reversal")
     else:
         from apps.settings.models import Restaurant
 
@@ -577,7 +612,7 @@ def cancel_stock_entry(entry):
                     unit_rate=None,
                     voucher_detail_no=sle.voucher_detail_no,
                     prevent_negative=sle.quantity > 0,
-                    posting_date=locked.posting_date,
+                    posting_date=timezone.localdate(),
                     variance_amount=variance,
                     variance_type=variance_type,
                     reversal_of_sle_id=sle.pk,
@@ -623,7 +658,7 @@ def cancel_stock_entry(entry):
                         else:
                             new_rows.append({"account": variance_acct, "credit": -diff})
                 if new_rows:
-                    _post_gl_rows(locked.posting_date, "Stock Entry", voucher_no, new_rows, "Reversal")
+                    _post_gl_rows(timezone.localdate(), "Stock Entry", voucher_no, new_rows, "Reversal")
             _revert_last_purchase_rates_for_stock_entry(locked, sles)
         locked.status = "CANCELLED"
         locked.save(update_fields=["status", "updated_at"])
@@ -854,7 +889,7 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
                 unit_rate=None,
                 voucher_detail_no=sle.voucher_detail_no,
                 prevent_negative=sle.quantity > 0,
-                posting_date=locked.posting_date,
+                posting_date=timezone.localdate(),
                 reversal_of_sle_id=sle.pk,
                 bin_obj=bin_obj,
             )
@@ -868,7 +903,7 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
                 gl.is_cancelled = True
                 gl.save(update_fields=["is_cancelled", "updated_at"])
             GLEntry.post(
-                posting_date=locked.posting_date,
+                posting_date=timezone.localdate(),
                 rows=[
                     {
                         "account": gl.account,
@@ -1027,7 +1062,7 @@ def cancel_purchase_receipt(receipt):
             unit_rate=None,
             voucher_detail_no=sle.voucher_detail_no,
             prevent_negative=True,
-            posting_date=locked.posting_date,
+            posting_date=timezone.localdate(),
             variance_amount=variance,
             variance_type=variance_type,
             reversal_of_sle_id=sle.pk,
@@ -1075,7 +1110,7 @@ def cancel_purchase_receipt(receipt):
                 else:
                     new_rows.append({"account": variance_acct, "credit": -diff})
         if new_rows:
-            _post_gl_rows(locked.posting_date, "Purchase Receipt", voucher_no, new_rows, "Reversal")
+            _post_gl_rows(timezone.localdate(), "Purchase Receipt", voucher_no, new_rows, "Reversal")
     _revert_last_purchase_rates(locked)
     locked.status = "CANCELLED"
     locked.save(update_fields=["status", "updated_at"])

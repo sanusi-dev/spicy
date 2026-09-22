@@ -61,6 +61,23 @@ class RestaurantModelTest(TestCase):
         with self.assertRaisesMessage(ValidationError, "cannot record sales income"):
             self.restaurant.full_clean()
 
+    def test_default_sales_returns_account_cannot_be_a_payment_account(self):
+        from apps.accounting.models import LedgerAccount
+        from apps.payments.models import ModeOfPayment, PaymentGLMapping
+
+        cash = LedgerAccount.objects.create(
+            name="Cash (returns test)",
+            account_type=LedgerAccount.ASSET,
+            report_type=LedgerAccount.BALANCE_SHEET,
+        )
+        PaymentGLMapping.objects.create(
+            mode_of_payment=ModeOfPayment.objects.create(name="Test Returns Cash", type="CASH"),
+            default_account=cash,
+        )
+        self.restaurant.default_sales_returns_account = cash
+        with self.assertRaisesMessage(ValidationError, "cannot record sales returns"):
+            self.restaurant.full_clean()
+
     def test_store_change_rejected_with_draft_stock_documents(self):
         old_store = Warehouse.objects.create(name="Old Store")
         new_store = Warehouse.objects.create(name="New Store")

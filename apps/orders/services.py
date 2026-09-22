@@ -1157,11 +1157,10 @@ def settle_time_rate(source_order, item):
 
 
 def _restore_stock(order, voucher_type="POS Return"):
-    """Create positive stock ledger entries reversing an order's deductions.
+    """Create positive stock ledger entries reversing an order's deductions at the sale's cost.
 
     Return lines marked ``not_restockable`` skip the restore; their value posts
-    as wastage instead. Restores are at current WAC; variance vs original COGS
-    is recorded for audit (SALE_RETURN).
+    as wastage instead.
     """
     voucher_no = str(order.pk)
     stock_items = order.items.select_related("item").filter(
@@ -1172,28 +1171,19 @@ def _restore_stock(order, voucher_type="POS Return"):
     if not order.stock_warehouse_id:
         raise ValidationError("This order has no stock warehouse snapshot for reversal.")
     warehouse = order.stock_warehouse
-    # For variance we need source order's sale-time WAC.
-    source = getattr(order, "return_against", None)
+    source = order.return_against
     for oi in stock_items.only("item__is_stock_item", "qty", "not_restockable"):
         if oi.not_restockable:
             continue
-        # Current WAC before restore — need bin's current valuation.
-        bin_obj = Bin.objects.filter(item=oi.item, warehouse=warehouse).first()
-        current_wac = bin_obj.valuation_rate if bin_obj and bin_obj.valuation_rate else Decimal("0")
-        orig_rate = settle_time_rate(source, oi.item) if source else Decimal("0")
-        qty = abs(oi.qty)
-        variance = qty * (current_wac - orig_rate) if source and current_wac != orig_rate else Decimal("0")
-        variance_type = "SALE_RETURN" if variance != 0 else ""
         StockLedgerEntry.create_entry(
             item=oi.item,
             warehouse=warehouse,
-            quantity=qty,
+            quantity=abs(oi.qty),
+            unit_rate=settle_time_rate(source, oi.item),
             voucher_type=voucher_type,
             voucher_no=voucher_no,
             voucher_detail_no=str(oi.pk),
             posting_date=order.posting_date,
-            variance_amount=variance,
-            variance_type=variance_type,
         )
 
 

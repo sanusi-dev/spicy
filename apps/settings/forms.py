@@ -68,6 +68,7 @@ class RestaurantForm(SettingsModelForm):
             "pos_allow_full_history",
             "require_payment_reference",
             "default_income_account",
+            "default_sales_returns_account",
             "default_expense_account",
             "round_off_account",
             "account_for_change_amount",
@@ -97,6 +98,7 @@ class RestaurantForm(SettingsModelForm):
         )
         for field_name in (
             "default_income_account",
+            "default_sales_returns_account",
             "default_expense_account",
             "round_off_account",
             "account_for_change_amount",
@@ -129,6 +131,7 @@ class ProductionUnitForm(SettingsModelForm):
             "printer_paper_width",
             "printer_cut_mode",
             "income_account",
+            "sales_returns_account",
             "expense_account",
         ]
 
@@ -147,6 +150,9 @@ class ProductionUnitForm(SettingsModelForm):
         ].help_text = "The warehouse that supplies this station — Kitchen for food, Bar for drinks."
         self.fields["income_account"].queryset = active_choices(
             LedgerAccount, self.instance.income_account_id, disabled=False, is_group=False
+        )
+        self.fields["sales_returns_account"].queryset = active_choices(
+            LedgerAccount, self.instance.sales_returns_account_id, disabled=False, is_group=False
         )
         self.fields["expense_account"].queryset = active_choices(
             LedgerAccount, self.instance.expense_account_id, disabled=False, is_group=False

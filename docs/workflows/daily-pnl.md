@@ -247,10 +247,10 @@ Food sales never touch this column. `test_food_contributes_zero_cogs` locks that
 
 Returns:
 
-- Restockable drink return: inventory comes back; Daily P&L **subtracts** `qty × return SLE unit_rate` (current WAC at return).
+- Restockable drink return: inventory comes back; Daily P&L **subtracts** `qty × return SLE unit_rate` (the sale's settle-time WAC — the return restores at the same cost the sale removed).
 - Non-restockable ("wastage") drink return: stock is not restored; Daily P&L **adds** a wastage COGS row at the sale's settle-time WAC — the same rate the GL wastage legs post.
 
-**Current behavior:** Daily P&L reconstructs drink cost from stock ledger rows of the day's orders. It does not read GL COGS accounts. Accounting already posts sale-return variance to COGS on the GL; that is a separate path.
+**Current behavior:** Daily P&L reconstructs drink cost from stock ledger rows of the day's orders. It does not read GL COGS accounts. Accounting reverses the sale's COGS and re-enters the stock at the same settle-time WAC on the GL; that is a separate path.
 
 ### Food
 

@@ -40,7 +40,7 @@ class PaymentGLMappingIncomeAccountTest(TestCase):
         cls.cash = ModeOfPayment.objects.create(name="Test Cash", type="CASH")
 
     def test_clean_rejects_income_account(self):
-        with self.assertRaisesMessage(ValidationError, "sales income account"):
+        with self.assertRaisesMessage(ValidationError, "sales account"):
             PaymentGLMapping(mode_of_payment=self.cash, default_account=self.food_sales).full_clean()
 
     def test_cash_mapping_still_allowed_alongside_income_accounts(self):

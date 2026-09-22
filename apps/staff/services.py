@@ -302,7 +302,6 @@ def cancel_cash_out(row, *, actor=None):
         "Shift Cash-Out",
         str(locked.pk),
         remarks=f"Cancelled shift cash-out #{locked.pk}",
-        posting_date=timezone.localdate(),
     )
     row.refresh_from_db()
     return row

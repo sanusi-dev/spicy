@@ -127,6 +127,25 @@ class SeedStoreWarehouseTest(TestCase):
         self.assertEqual(restaurant.store_warehouse.name, "Store")
         self.assertEqual(restaurant.default_warehouse.name, "Bar")
 
+    def test_seed_uses_dedicated_wastage_account(self):
+        Restaurant.objects.create(company="Seed Wastage Co")
+        SeedPosSetup().handle()
+        restaurant = Restaurant.load()
+        self.assertIsNotNone(restaurant.wastage_account_id)
+        self.assertNotEqual(restaurant.wastage_account_id, restaurant.default_expense_account_id)
+
+    def test_seed_wires_sales_returns_accounts(self):
+        Restaurant.objects.create(company="Seed Returns Co")
+        SeedPosSetup().handle()
+        self.assertEqual(
+            ProductionUnit.objects.get(department="DRINKS").sales_returns_account.name,
+            "Drinks Sales Returns",
+        )
+        self.assertEqual(
+            ProductionUnit.objects.get(department="FOOD").sales_returns_account.name,
+            "Food Sales Returns",
+        )
+
 
 class OpeningCancelBlocksOrdersTest(ReviewFixBase):
     def test_cancel_blocked_when_orders_exist(self):
