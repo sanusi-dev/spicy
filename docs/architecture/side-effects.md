@@ -11,7 +11,7 @@
 
 ## App Startup and Signals
 
-- `apps/users/apps.py:9-22` registers a `post_migrate` callback that creates the three RestPOS groups and imports user signal receivers.
+- `apps/users/apps.py:9-22` registers a `post_migrate` callback that creates the three Spicy groups and imports user signal receivers.
 - `apps/inventory/apps.py:9-62` registers a `post_migrate` callback that seeds standard UOMs and item groups.
 - `apps/users/signals.py:26-45` sends an admin email after allauth signup and promotes a confirmed email address to primary.
 - `apps/users/signals.py:47-63` deletes old avatar files before user save and the current avatar after user deletion.

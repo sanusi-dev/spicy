@@ -328,7 +328,7 @@ class PurchaseReceiptUOMFormTest(UOMConversionTestBase):
         from apps.users.models import CustomUser
 
         user = CustomUser.objects.create_user(username="mgr@test.com", password="x", email="mgr@test.com")
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         user.groups.add(mgr)
         self.client.login(username="mgr@test.com", password="x")
         self._conversion()
@@ -345,7 +345,7 @@ class PurchaseReceiptUOMFormTest(UOMConversionTestBase):
         from apps.users.models import CustomUser
 
         user = CustomUser.objects.create_user(username="mgr2@test.com", password="x", email="mgr2@test.com")
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         user.groups.add(mgr)
         self.client.login(username="mgr2@test.com", password="x")
         self._conversion()
@@ -388,7 +388,7 @@ class StockEntryUOMFormTest(UOMConversionTestBase):
         from apps.users.models import CustomUser
 
         user = CustomUser.objects.create_user(username=username, password="x", email=username)
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         user.groups.add(mgr)
         self.client.login(username=username, password="x")
 

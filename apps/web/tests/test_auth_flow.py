@@ -10,8 +10,8 @@ class TestRoleBasedRedirects(TestViewBase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
-        cls.cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cls.manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
+        cls.cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
 
     def _make_user(
         self, username="testuser", email="test@example.com", is_staff=False, is_superuser=False, groups=None
@@ -46,7 +46,7 @@ class TestRoleBasedRedirects(TestViewBase):
         response = self._login_and_follow_redirect(user)
         self.assertRedirects(response, reverse("web:dashboard"))
 
-    def test_django_staff_without_restpos_role_redirects_to_pending(self):
+    def test_django_staff_without_spicy_role_redirects_to_pending(self):
         user = self._make_user(username="test_staff_user", is_staff=True)
         response = self._login_and_follow_redirect(user)
         self.assertRedirects(response, reverse("web:pending_approval"))
@@ -77,7 +77,7 @@ class TestPendingApprovalView(TestViewBase):
         self.assertContains(response, "Pending Approval")
 
     def test_staff_user_redirected_away_from_pending(self):
-        manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         self.user.groups.add(manager_group)
         response = self.client.get(reverse("web:pending_approval"))
         self.assertEqual(response.status_code, 302)
@@ -85,7 +85,7 @@ class TestPendingApprovalView(TestViewBase):
 
 class TestDashboardView(TestLoginRequiredViewBase):
     def test_cashier_gets_403_on_dashboard(self):
-        cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
         from apps.users.models import CustomUser
 
         CustomUser.objects.create_user(username="cash403@example.com", password="12345").groups.add(cashier_group)
@@ -106,16 +106,16 @@ class TestCustomUserProperties(TestViewBase):
     def test_role_flags_flip_with_group_membership(self):
         from apps.users.models import CustomUser
 
-        Group.objects.get_or_create(name="RestPOS Manager")
-        Group.objects.get_or_create(name="RestPOS Cashier")
+        Group.objects.get_or_create(name="Spicy Manager")
+        Group.objects.get_or_create(name="Spicy Cashier")
         mgr = CustomUser.objects.create_user(username="mgr@example.com", email="mgr@example.com")
         self.assertFalse(mgr.is_manager)
-        mgr.groups.add(Group.objects.get(name="RestPOS Manager"))
+        mgr.groups.add(Group.objects.get(name="Spicy Manager"))
         self.assertTrue(mgr.is_manager)
 
         cash = CustomUser.objects.create_user(username="cash@example.com", email="cash@example.com")
         self.assertFalse(cash.is_cashier)
-        cash.groups.add(Group.objects.get(name="RestPOS Cashier"))
+        cash.groups.add(Group.objects.get(name="Spicy Cashier"))
         self.assertTrue(cash.is_cashier)
 
     def test_has_backoffice_access(self):
@@ -129,12 +129,12 @@ class TestCustomUserProperties(TestViewBase):
         staff.save()
         self.assertFalse(staff.has_backoffice_access)
 
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         mgr_user = CustomUser.objects.create_user(username="mgr2@example.com", email="mgr2@example.com")
         mgr_user.groups.add(mgr)
         self.assertTrue(mgr_user.has_backoffice_access)
 
-        cashier, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cashier, _ = Group.objects.get_or_create(name="Spicy Cashier")
         cash_user = CustomUser.objects.create_user(username="cash2@example.com", email="cash2@example.com")
         cash_user.groups.add(cashier)
         self.assertFalse(cash_user.has_backoffice_access)
@@ -142,8 +142,8 @@ class TestCustomUserProperties(TestViewBase):
     def test_has_staff_role(self):
         from apps.users.models import CustomUser
 
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
-        cashier, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
+        cashier, _ = Group.objects.get_or_create(name="Spicy Cashier")
         mgr_user = CustomUser.objects.create_user(username="staffmgr@example.com", email="staffmgr@example.com")
         mgr_user.groups.add(mgr)
         self.assertTrue(mgr_user.has_staff_role)

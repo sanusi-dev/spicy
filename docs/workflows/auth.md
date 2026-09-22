@@ -10,9 +10,9 @@
 
 Roles are Django groups seeded after migrations:
 
-- `RestPOS Admin`
-- `RestPOS Manager`
-- `RestPOS Cashier`
+- `Spicy Admin`
+- `Spicy Manager`
+- `Spicy Cashier`
 
 Plain properties in `CustomUser` derive `is_admin`, `is_manager`, `is_cashier`, `has_backoffice_access`, and `has_staff_role` via `groups.filter(...).exists()` — no caching and no invalidation signal. Repeated access on the same user issues repeated indexed `exists()` queries (O(1) per access, not per row).
 
@@ -24,7 +24,7 @@ Every `/backoffice/*` and `/pos/*` view declares its role requirement through `a
 |---|---|---|
 | `@backoffice_required` | `has_backoffice_access` (admin/manager/superuser) | Inventory, menu, payments reads, settings reads, orders backoffice, backoffice shifts (opening/closing entries), web dashboard |
 | `@manager_required` | superuser/admin/manager | Accounting, reports (Daily P&L and query reports), payments writes (modes, GL mappings), order cancel/return/delete, restaurant settings, production unit writes |
-| `@staff_required` | `has_staff_role` (any RestPOS role) | POS (`views_pos`), `web:pos_index` |
+| `@staff_required` | `has_staff_role` (any Spicy role) | POS (`views_pos`), `web:pos_index` |
 | `@admin_required` | superuser/admin | Staff role assignment/removal only |
 
 Each decorator wraps `login_required`: anonymous users redirect to `settings.LOGIN_URL?next=...`; authenticated users who fail the role test get `403 PermissionDenied`, not a redirect.

@@ -16,7 +16,7 @@ class MenuViewTestBase(TestCase):
         cls.user = CustomUser.objects.create_user(
             username="admin@test.com", password="testpass123", email="admin@test.com"
         )
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
         cls.uom = UOM.objects.create(name="Nos")
         cls.group = ItemGroup.objects.create(name="Food")
@@ -63,7 +63,7 @@ class TestMenuViews(MenuViewTestBase):
         self.assertContains(response, "Enabled")
 
     def test_menu_detail_marks_active_menu(self):
-        Restaurant.objects.create(company="RestPOS", active_menu=self.menu)
+        Restaurant.objects.create(company="Spicy", active_menu=self.menu)
         response = self.client.get(reverse("menu:menu_detail", kwargs={"pk": self.menu.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Live on POS")
@@ -163,7 +163,7 @@ class TestItemAddOnViews(MenuViewTestBase):
         )
         MenuItem.objects.create(menu=self.menu, item=add_on_item, rate=Decimal("125"))
         ItemAddOn.objects.create(parent_item=self.item_food, add_on_item=add_on_item)
-        Restaurant.objects.create(company="RestPOS", active_menu=self.menu)
+        Restaurant.objects.create(company="Spicy", active_menu=self.menu)
         response = self.client.get(reverse("menu:add_on_list"))
         self.assertEqual(response.status_code, 200)
         priced_add_on = response.context["add_ons"].get(add_on_item=add_on_item)
@@ -184,7 +184,7 @@ class TestItemAddOnViews(MenuViewTestBase):
         other_menu = Menu.objects.create(name="Dinner Menu")
         MenuItem.objects.create(menu=other_menu, item=add_on_item, rate=Decimal("125"))
         ItemAddOn.objects.create(parent_item=self.item_food, add_on_item=add_on_item)
-        Restaurant.objects.create(company="RestPOS", active_menu=self.menu)
+        Restaurant.objects.create(company="Spicy", active_menu=self.menu)
         response = self.client.get(reverse("menu:add_on_list"))
         self.assertEqual(response.status_code, 200)
         unpriced_add_on = response.context["add_ons"].get(add_on_item=add_on_item)

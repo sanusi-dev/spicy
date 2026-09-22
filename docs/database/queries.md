@@ -23,7 +23,7 @@
 
 - Order list annotates item/ticket/pending-ticket counts and searches invoice, customer, or numeric order number.
 - KOT list filters KOT fields and joins order invoice/order number.
-- Staff list prefetches only RestPOS groups, paginates 20 users, and derives roles from the cached group set.
+- Staff list prefetches only Spicy groups, paginates 20 users, and derives roles from the cached group set.
 - Menu list annotates item count; inventory item list supports flags, variants, active status, and name/code search.
 
 ## Query reports

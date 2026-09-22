@@ -1,6 +1,6 @@
-# RestPOS Documentation
+# Spicy Documentation
 
-This directory is the living technical map of the current RestPOS source tree. It describes the implementation that exists in `apps/`, `templates/`, `assets/`, and `restpos/`; it is not a restatement of the intended product scope.
+This directory is the living technical map of the current Spicy source tree. It describes the implementation that exists in `apps/`, `templates/`, `assets/`, and `spicy/`; it is not a restatement of the intended product scope.
 
 ## Read This First
 

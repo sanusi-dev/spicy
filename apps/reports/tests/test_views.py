@@ -15,7 +15,7 @@ class DailyPnLViewTest(DailyPnLTestMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         cls._setup_pnl_world()
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.manager.groups.add(mgr)
 
     def test_cashier_forbidden(self):

@@ -6,21 +6,21 @@
 set -euo pipefail
 
 RETENTION_DAYS=14
-POSTGRES_DB="${POSTGRES_DB:-restpos}"
+POSTGRES_DB="${POSTGRES_DB:-spicy}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 cd "$(dirname "$0")/.."
 mkdir -p backups
 
 TS=$(date +%Y-%m-%d-%H%M%S)
-DB_DUMP="backups/restpos-${TS}.sql.gz"
+DB_DUMP="backups/spicy-${TS}.sql.gz"
 MEDIA_TAR="backups/media-${TS}.tar.gz"
 
 docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$DB_DUMP"
 tar -czf "$MEDIA_TAR" media/
 
 # Keep 14 daily snapshots; snapshot files only, never the log or drill records.
-find backups/ -maxdepth 1 -name 'restpos-*.sql.gz' -mtime +"$RETENTION_DAYS" -delete
+find backups/ -maxdepth 1 -name 'spicy-*.sql.gz' -mtime +"$RETENTION_DAYS" -delete
 find backups/ -maxdepth 1 -name 'media-*.tar.gz' -mtime +"$RETENTION_DAYS" -delete
 
 echo "Database snapshot: $(readlink -f "$DB_DUMP")"

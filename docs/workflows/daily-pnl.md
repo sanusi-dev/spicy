@@ -17,7 +17,7 @@ Revenue
 = Profit
 ```
 
-RestPOS does that for **one business day**, split into **FOOD / DRINKS / TOTAL**, because the bar is a separate business sharing the same cashier.
+Spicy does that for **one business day**, split into **FOOD / DRINKS / TOTAL**, because the bar is a separate business sharing the same cashier.
 
 The report is a **management snapshot**, not the accounting books. Settlement already posts income, payment, rounding, and drink COGS to the GL. The Daily P&L re-reads operational data (orders, stock movements, shift closes, plus a few numbers the manager types) and presents a restaurant-shaped day: sales, food and drink cost, theoretical-vs-actual food memos, electricity, gas, wages, rent slice, cash shortage, net profit.
 
@@ -67,7 +67,7 @@ The Daily P&L is the document that answers those questions for **one day**, in a
 
 ## 3. What it is not
 
-| It is not | What RestPOS does instead |
+| It is not | What Spicy does instead |
 |---|---|
 | The formal accounting P&L | A query over `GLEntry` — see [Query reports](query-reports.md). |
 | Something that posts journals | `submit_daily_pnl()` writes snapshot rows only. Tests assert `GLEntry` count does not change. |
@@ -551,7 +551,7 @@ Cancel does **not** delete those rows. Amend does **not** copy lines — only in
 
 ## 16. Pages and URLs
 
-Prefix: `/backoffice/reports/` (`restpos/urls.py`). App namespace `reports`.
+Prefix: `/backoffice/reports/` (`spicy/urls.py`). App namespace `reports`.
 
 | URL name | Path | What it does |
 |---|---|---|

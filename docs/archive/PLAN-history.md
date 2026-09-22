@@ -1,4 +1,4 @@
-# RestPOS — Implementation Plan History (Archive)
+# Spicy — Implementation Plan History (Archive)
 
 Verbatim copies of implemented sections removed from `PLAN.md`. Historical — describes the
 design as it was; current product facts live in `PLAN.md` §2/§4, the §3 status table, and
@@ -83,8 +83,8 @@ All models extend `apps.utils.models.BaseModel` (adds `created_at`, `updated_at`
 - `occupied` and `latest_invoice_time` are `editable=False` — updated by the orders app
 - `Meta.unique_together`: `(room, name)` — no duplicate table names within a room
 
-**Deviation from URY:** URY Table links to URY Restaurant (required). RestPOS Table links to
-Room (required) and Branch (denormalized). The Restaurant link is dropped because RestPOS has
+**Deviation from URY:** URY Table links to URY Restaurant (required). Spicy Table links to
+Room (required) and Branch (denormalized). The Restaurant link is dropped because Spicy has
 a single Restaurant per branch (singleton), and the branch is already reachable via `room.branch`.
 
 ##### Restaurant (`settings.Restaurant`)
@@ -124,7 +124,7 @@ a single Restaurant per branch (singleton), and the branch is already reachable 
 - `clean()`: validate no duplicate user+room pairs
 - `Meta.unique_together`: `(user, room)`
 
-**Deviation from URY:** URY uses a child table (URY User) on Branch. RestPOS uses a standalone
+**Deviation from URY:** URY uses a child table (URY User) on Branch. Spicy uses a standalone
 through model — cleaner in Django ORM and easier to query ("which rooms can this user see?").
 
 #### Views & URLs
@@ -222,7 +222,7 @@ Use Django's `TestCase` for database tests. Test both happy path and error/edge 
 | `address` is TextField, not Link→Address | No Address model |
 | `company` is CharField, not Link→Company | No Company model |
 | `occupied` and `latest_invoice_time` are `editable=False` | System-managed, prevents manual override |
-| Printer settings NOT on Room | RestPOS routes by department flag (#68), printer config on ProductionUnit (#16) |
+| Printer settings NOT on Room | Spicy routes by department flag (#68), printer config on ProductionUnit (#16) |
 | Table links to Room (not Restaurant) | Branch reachable via room.branch; single Restaurant per branch |
 | Branch kept in DB but hidden in the UI; auto-set via `Branch.get_default()` (or derived from room) on Menu, Room, Warehouse, Restaurant; Table/UserRoomAssignment derive branch from room | Single-site restaurant; multi-branch isolation remains available without cashier-facing branch pickers |
 
@@ -234,8 +234,8 @@ Use Django's `TestCase` for database tests. Test both happy path and error/edge 
 4. Write views in `apps/settings/views.py`
 5. Write URLs in `apps/settings/urls.py`
 6. Register in `apps/settings/admin.py`
-7. Add `apps.settings` to `INSTALLED_APPS` in `restpos/settings.py`
-8. Include settings URLs in `restpos/urls.py`
+7. Add `apps.settings` to `INSTALLED_APPS` in `spicy/settings.py`
+8. Include settings URLs in `spicy/urls.py`
 9. Write templates in `templates/backoffice/settings/`
 10. Create and run migrations: `make migrations && make migrate`
 11. Write tests: `apps/settings/tests/`
@@ -249,7 +249,7 @@ Use Django's `TestCase` for database tests. Test both happy path and error/edge 
 **Deviation from reference (recorded per REFACTOR_SERVICE_LAYER.md §"Reference notes & deviation documentation"):**
 
 > ERPNext/URY keep document workflows as doctype methods (validate/on_submit).
-> RestPOS deviates deliberately: multi-entity workflows (order settlement,
+> Spicy deviates deliberately: multi-entity workflows (order settlement,
 > cancellation, returns, ticket creation, drink stock accounting, shift closing)
 > live in per-app service modules (`apps/orders/services.py`,
 > `apps/staff/services.py`). Models retain data, invariants, and simple
@@ -634,7 +634,7 @@ No per-line warehouse — the whole receipt posts to `PurchaseReceipt.warehouse`
 | UOM Conversion dropped | Items use a single stock_uom — the practical unit used in the kitchen (Mudu, Kg, Pieces). No conversions needed |
 | Batches, barcodes, product bundles, reorder levels dropped | Removed as unnecessary for restaurant operations — kitchen manager tracks consumption manually |
 | Bin simplified (no ordered_qty, indented_qty, planned_qty) | Restaurant doesn't use purchase orders or work orders |
-| `department` field added to Item | RestPOS-specific: FOOD/DRINKS classification (#260) — not in ERPNext |
+| `department` field added to Item | Spicy-specific: FOOD/DRINKS classification (#260) — not in ERPNext |
 | `last_purchase_rate` auto-updated on Purchase Receipt | ERPNext naming: standard_rate = selling price; last_purchase_rate = auto-updated cost from buying transactions |
 | 3-tier roles (Admin/Manager/Cashier) | Only superusers can assign roles. Admin → Manager → Cashier hierarchy |
 
@@ -847,7 +847,7 @@ is a FK to `ModeOfPayment`.
   from `type == "CASH"`. The Order app (Phase 7) handles change calculation, not here.
 - **Simple `enabled` toggle.** Disabled modes are hidden from the opening-balance form on the
   staff app while remaining valid historical references on past opening entries. ERPNext hides
-  modes via the POS Profile's `payments` child table; RestPOS has no POS Profile yet, so we keep
+  modes via the POS Profile's `payments` child table; Spicy has no POS Profile yet, so we keep
   the toggle on the master.
 
 #### Models (2 total)
@@ -955,7 +955,7 @@ class PaymentGLMappingAdmin(admin.ModelAdmin):
 | `company` is CharField, not Link→Company | No Company model — single `Restaurant` singleton per branch with a company name string |
 | No per-warehouse or per-branch isolation on modes | The project is single-branch; modes are shared restaurant-wide |
 | No `is_change` flag | Change capability inferred from `type == "CASH"`; only cash modes dispense physical notes |
-| Simple `enabled` toggle on mode | ERPNext hides modes via POS Profile's `payments` child table. RestPOS has no POS Profile yet, so the toggle lives on the master. |
+| Simple `enabled` toggle on mode | ERPNext hides modes via POS Profile's `payments` child table. Spicy has no POS Profile yet, so the toggle lives on the master. |
 | Seed includes "USSD / Mobile Money" (PHONE) | Common in Nigerian restaurant context; matches #94 ("Phone (mobile money / USSD)") |
 
 #### Implementation steps
@@ -966,8 +966,8 @@ class PaymentGLMappingAdmin(admin.ModelAdmin):
 4. Write views in `apps/payments/views.py`
 5. Write URLs in `apps/payments/urls.py`
 6. Register in `apps/payments/admin.py`
-7. Add `apps.payments` to `INSTALLED_APPS` in `restpos/settings.py` (after `apps.menu`)
-8. Include payments URLs in `restpos/urls.py`
+7. Add `apps.payments` to `INSTALLED_APPS` in `spicy/settings.py` (after `apps.menu`)
+8. Include payments URLs in `spicy/urls.py`
 9. Write templates in `templates/backoffice/payments/`
 10. Create and run migrations: `make migrations && make migrate`
 11. Write seed migration `0002_seed_payment_modes.py` — creates Cash, Bank Transfer, Card, USSD
@@ -1002,7 +1002,7 @@ Taxes, URY User, Role Permitted, URY hooks for opening/closing validation
 | `references/erpnext-develop/erpnext/accounts/doctype/pos_closing_entry_detail/pos_closing_entry_detail.json` | Child table: mode_of_payment, opening_amount, expected_amount, closing_amount, difference |
 | `references/erpnext-develop/erpnext/controllers/status_updater.py` (lines 150–162) | Derived `status` rules for both doctypes: opening `Draft→Open→Closed→Cancelled` keyed on `docstatus` + presence of `pos_closing_entry`; closing `Draft→Submitted→Queued/Failed→Cancelled` |
 | `references/ury-develop/ury/ury/doctype/ury_user/ury_user.json` | Child table of URY User (user + room) on Branch — single shared session per branch |
-| `references/ury-develop/ury/ury/hooks/ury_pos_opening_entry.py` | `set_cashier_room`, `main_pos_open_check` (sub-cashier must wait for main) — **not ported**; RestPOS uses single-session model |
+| `references/ury-develop/ury/ury/hooks/ury_pos_opening_entry.py` | `set_cashier_room`, `main_pos_open_check` (sub-cashier must wait for main) — **not ported**; Spicy uses single-session model |
 | `references/ury-develop/ury/ury/hooks/ury_pos_closing_entry.py` | `calculate_closing_amount`, `validate_cashier` — **not ported**; single-session model |
 | `references/ury-develop/ury/ury_pos/api.py` `getPosProfile` / `posOpening` / `pos_opening_check` | How URY exposes shift state to the POS frontend — pattern for `staff_dashboard` view |
 | `references/ury-develop/ury/ury/doctype/sub_pos_closing/sub_pos_closing.json` | Sub-cashier close — **not ported**; single-session model |
@@ -1037,7 +1037,7 @@ Taxes, URY User, Role Permitted, URY hooks for opening/closing validation
 - **Manager + Cashier can both open/close.** Whoever is logged in with `has_staff_role` can act.
   Admin can always act. `cashier` field is the user who opened (audit), not a single permitted user.
 - **GL-account check on opening balance deferred.** ERPNext requires every `mode_of_payment` in
-  the opening balance to have a GL account mapped. RestPOS has no `LedgerAccount`, so
+  the opening balance to have a GL account mapped. Spicy has no `LedgerAccount`, so
   this check is deferred — the manager ensures each enabled mode has a `PaymentGLMapping` row via
   the payments core CRUD before opening a shift.
 - **Round two-decimal precision only.** `opening_amount`, `expected_amount`, `closing_amount`,
@@ -1378,7 +1378,7 @@ class ClosingPaymentAdmin(admin.ModelAdmin):
 | `expected_amount` in Phase 5 = `opening_amount` only | Phase 7 extends `POSClosingEntry.submit()` to add Σ order payments in the same mode. The Phase 5 plan explicitly notes the extension point. |
 | `period_start_date` defaults to `timezone.now()` on creation, not on submit | The cashier expects the shift to start when they hit "Open", not when they finished typing the form. Matches ERPNext's `pos_opening_entry.js` `period_start_date: now_datetime()` on form load. |
 | **Opening-float form: all-methods with 0 default.** `OpeningFloatForm` renders one `DecimalField` per active `ModeOfPayment` (CASH-type sorted first), every field pre-filled with `0.00` and `required=False`. This is a faithful carbon-copy of ERPNext's Desk JS pre-population (`pos_opening_entry.js` lines 42-54, which adds one row per configured payment method with `opening_amount=0`) and the Frappe docs ("Opening balances for other payment methods (e.g., Card, UPI, Wallet) can be entered if applicable"). The cashier typically only fills the cash drawer count; electronic fields are left at 0 when the bank/POS balance is not accessible at shift-open time, and can be overridden with the actual opening balance when it is. The ERPNext data model is preserved exactly — `OpeningPayment` has one row per configured `ModeOfPayment` so `POSClosingEntry.submit()` (which iterates `entry.opening_payments.all()`) works unchanged. `posting_date` (defaults to today on the model) and `remarks` (blank by default) are no longer exposed in the cashier-facing form. If no active `ModeOfPayment` exists at all, the form renders a no-modes error card and blocks shift open. | (1) Cashier friction: the original ERPNext Desk UI shows an editable table with a mode-of-payment dropdown per row, requiring the cashier to add/remove rows manually. A pre-populated grid with one numeric input per active mode is faster and eliminates the duplicate-mode / missing-mode risk of free-form rows. (2) Field validation (`min_value=0`, `step=0.01`, `inputmode=decimal`) gives mobile-friendly numeric input without needing the custom `OpeningPaymentForm`+`OpeningPaymentFormSet` machinery — the per-row mode is rendered as a display label, not a FK dropdown, because the cashier is filling amounts for pre-determined modes, not choosing which modes to declare. (3) All fields default to 0 and are `required=False` so a POST with no entered amounts doesn't fail form validation but creates fully-reconcilable rows — matches ERPNext's `reqd: 1 + default: "0"` semantics (a row must exist, 0 is a valid amount). |
-| **Closing flow: auto-create-or-reuse draft, inline-edit detail page, no manual shift selection.** Both ERPNext Desk (`pos_closing_entry.js` lines 5-9 — `frm.set_query("pos_opening_entry", ...)` filtered to `status="Open", docstatus=1`) and URY's `sub_pos_closing.js` (lines 37-39, same filter + `user=session.user`) make the cashier manually pick which open shift to close from a filtered Link dropdown. RestPOS **does not** — `closing_entry_create` is now a GET-only endpoint that immediately auto-creates (or reuses an existing) DRAFT `POSClosingEntry` for the single Open shift and redirects to its detail page. `select_for_update()` on the open shift serialises concurrent double-clicks on the "Close Shift" button so they cannot create duplicate drafts; a second GET when a DRAFT already exists just redirects to it. The detail page then renders the reconciliation table as an **inline-editable form** (POSTs back to the same detail URL — PRG pattern) for DRAFT entries, and a read-only `Difference` column for SUBMITTED/CANCELLED entries. The "Submit & Close Shift" button is wired to a SweetAlert confirmation dialog (`data-confirm-title` / `data-confirm-body` / `data-confirm-button` attributes — existing pattern used in `opening_entry_detail.html`, `gl_mapping_list.html`, `staff_list.html`) so the cashier must explicitly confirm before the close finalises. The separate `closing_entry_update` view + URL are removed; `closing_entry_form.html` and `closing_entry_reconcile.html` templates are deleted. The "Close Shift" action is available from the staff dashboard (existing), the opening-entry list (new `Close shift` link on `is_open` rows), and the closing-entry list (detail view). | (1) RestPOS enforces "one Open shift per branch" (see `POSOpeningEntry.clean()` + `submit()` re-check inside `select_for_update`), so a dropdown of open shifts is a list-of-one and pure friction. ERPNext/URY require manual selection only because their architecture permits multi-open-shifts per user and multi-cashier per profile — neither applies here. (2) Industry consensus for single-shift-per-register POS systems (Lightspeed S-Series, Dynamics 365 Commerce `Tender declaration`→`Close shift`, StoreHub, ConnectPOS) is one-click close against the current shift, no selection step. (3) The auto-reuse-existing-draft guard prevents the double-click-on-`Close-Shift` race and the page-refresh-after-creating-draft race from leaking orphan drafts. (4) Folding the edit form into the detail page (one page instead of two) halves click count and matches the existing `opening_entry_form.html` symmetry. (5) The SweetAlert confirmation on submit honours ERPNext's submit-then-immutable pattern (the closing entry cannot be edited after submit, only cancelled) — the cashier explicitly agrees before the irreversibility kicks in. |
+| **Closing flow: auto-create-or-reuse draft, inline-edit detail page, no manual shift selection.** Both ERPNext Desk (`pos_closing_entry.js` lines 5-9 — `frm.set_query("pos_opening_entry", ...)` filtered to `status="Open", docstatus=1`) and URY's `sub_pos_closing.js` (lines 37-39, same filter + `user=session.user`) make the cashier manually pick which open shift to close from a filtered Link dropdown. Spicy **does not** — `closing_entry_create` is now a GET-only endpoint that immediately auto-creates (or reuses an existing) DRAFT `POSClosingEntry` for the single Open shift and redirects to its detail page. `select_for_update()` on the open shift serialises concurrent double-clicks on the "Close Shift" button so they cannot create duplicate drafts; a second GET when a DRAFT already exists just redirects to it. The detail page then renders the reconciliation table as an **inline-editable form** (POSTs back to the same detail URL — PRG pattern) for DRAFT entries, and a read-only `Difference` column for SUBMITTED/CANCELLED entries. The "Submit & Close Shift" button is wired to a SweetAlert confirmation dialog (`data-confirm-title` / `data-confirm-body` / `data-confirm-button` attributes — existing pattern used in `opening_entry_detail.html`, `gl_mapping_list.html`, `staff_list.html`) so the cashier must explicitly confirm before the close finalises. The separate `closing_entry_update` view + URL are removed; `closing_entry_form.html` and `closing_entry_reconcile.html` templates are deleted. The "Close Shift" action is available from the staff dashboard (existing), the opening-entry list (new `Close shift` link on `is_open` rows), and the closing-entry list (detail view). | (1) Spicy enforces "one Open shift per branch" (see `POSOpeningEntry.clean()` + `submit()` re-check inside `select_for_update`), so a dropdown of open shifts is a list-of-one and pure friction. ERPNext/URY require manual selection only because their architecture permits multi-open-shifts per user and multi-cashier per profile — neither applies here. (2) Industry consensus for single-shift-per-register POS systems (Lightspeed S-Series, Dynamics 365 Commerce `Tender declaration`→`Close shift`, StoreHub, ConnectPOS) is one-click close against the current shift, no selection step. (3) The auto-reuse-existing-draft guard prevents the double-click-on-`Close-Shift` race and the page-refresh-after-creating-draft race from leaking orphan drafts. (4) Folding the edit form into the detail page (one page instead of two) halves click count and matches the existing `opening_entry_form.html` symmetry. (5) The SweetAlert confirmation on submit honours ERPNext's submit-then-immutable pattern (the closing entry cannot be edited after submit, only cancelled) — the cashier explicitly agrees before the irreversibility kicks in. |
 | **Opening flow: inline-edit detail page for DRAFT, no separate edit form.** Symmetric with the closing-flow change. `opening_entry_detail` now accepts POST for DRAFT entries (re-uses `_save_opening_entry` to persist the edited amounts via the same `OpeningFloatForm`), renders the float table as an inline-editable form for DRAFT entries (POST back to the same detail URL — PRG), and a read-only two-column table for SUBMITTED/CANCELLED/Open entries. The separate `opening_entry_update` view + URL are removed; `opening_entry_form.html` is kept ONLY for `opening_entry_create` (the "Open Shift" action on the dashboard creates the initial draft, then redirects to the detail page for editing — same pattern as `closing_entry_create`). The "Submit & Open Shift" button is now wired to a SweetAlert confirmation dialog (symmetry with "Submit & Close Shift"). The legacy `confirm_empty` branch in `opening_entry_submit` is removed because `_save_opening_entry` now always seeds one row per active `ModeOfPayment` — a draft with no rows only exists if no modes are configured, in which case the create form blocks it at the form level. | (1) Symmetry: closing detail already had inline editing; opening detail now matches — both draft pages edit in place, both submitted pages are read-only. (2) Cuts one navigation hop per draft edit (no separate Edit button + form page). (3) SweetAlert confirmation on submit mirrors the closing submit — the cashier explicitly confirms before the irreversible shift-open. (4) The `confirm_empty` path was dead code — removing it eliminates an untestable branch. |
 | **Closing reconciliation: clarify `expected_amount` column to the cashier.** A tooltip is rendered on both the closing-detail page and the opening-detail page's closing-reconciliation table explaining that `Expected = Opening + collected sales during the shift (there is no order tracking yet, so expected equals opening)`, and `Difference = closing − expected` (negative = short, positive = excess). | Without this, cashiers see `expected = opening` and assume it's a bug (it's not — it's correct for Phase 5's scope; Phase 7's `POSClosingEntry.submit()` extension adds Σ collected sales per method, making `expected ≠ opening` and `difference ≈ 0` for honest shifts). The tooltip makes the Phase 5 / Phase 7 expansion point visible to the user, not just an internal PLAN.md note. |
 
@@ -1390,8 +1390,8 @@ class ClosingPaymentAdmin(admin.ModelAdmin):
 4. Write views in `apps/staff/views.py` (with `has_staff_role` guard, `@require_POST` for mutating endpoints, HTMX partial returns)
 5. Write URLs in `apps/staff/urls.py`
 6. Register in `apps/staff/admin.py`
-7. Add `apps.staff` to `INSTALLED_APPS` in `restpos/settings.py` (after `apps.payments`)
-8. Include staff URLs in `restpos/urls.py`
+7. Add `apps.staff` to `INSTALLED_APPS` in `spicy/settings.py` (after `apps.payments`)
+8. Include staff URLs in `spicy/urls.py`
 9. Write templates in `templates/backoffice/staff/`
 10. Create and run migrations: `make migrations && make migrate`
 11. Write tests: `apps/staff/tests/`
@@ -1430,7 +1430,7 @@ Terminal Configuration), A5 partial (Tax template — later removed)
 | `references/erpnext-develop/erpnext/accounts/doctype/sales_taxes_and_charges_template/sales_taxes_and_charges_template.json` | TaxTemplate fields: `title`, `is_default`, `disabled`, `company`, `tax_category`, `taxes` (Table→Sales Taxes and Charges) |
 | `references/erpnext-develop/erpnext/accounts/doctype/sales_taxes_and_charges_template/sales_taxes_and_charges_template.py` | Validation: default exclusivity per company, disabled-not-default, tax_category uniqueness, per-row account/cost_center validation; `autoname` = `f"{title} - {company_abbr}"` |
 | `references/erpnext-develop/erpnext/accounts/doctype/sales_taxes_and_charges/sales_taxes_and_charges.json` | TaxRate row: `charge_type`, `rate`, `account_head`, `description`, `cost_center`, `included_in_print_rate`, `row_id` + computed `*_base_*` fields (deferred to Phase 8) |
-| `references/erpnext-develop/erpnext/accounts/doctype/pos_opening_entry/pos_opening_entry.json` | `pos_profile` is a required Link on POS Opening Entry (Phase 6 adds nullable FK to RestPOS POSOpeningEntry) |
+| `references/erpnext-develop/erpnext/accounts/doctype/pos_opening_entry/pos_opening_entry.json` | `pos_profile` is a required Link on POS Opening Entry (Phase 6 adds nullable FK to Spicy POSOpeningEntry) |
 | `references/ury-develop/ury/ury_pos/api.py` | Fields the POS frontend consumes from POSProfile (§G of research): `branch`, `warehouse`, `company`, `paid_limit`, `custom_edit_order_type`, `custom_enable_kot_reprint`, `printer_settings`, `payments`, `applicable_for_users`, `custom_daily_pos_close`. Discount / table-attention / warehouse-switch / role-billing / KOT-delay / multi-cashier fields reviewed and **dropped** — see deviations. |
 | `references/ury-develop/ury/ury/doctype/aggregator_settings/aggregator_settings.json` | Reviewed and dropped — third-party food-delivery aggregator integration is out of scope |
 
@@ -1438,7 +1438,7 @@ Terminal Configuration), A5 partial (Tax template — later removed)
 
 - **TaxTemplate attached only to Restaurant.** ERPNext puts the tax template on
   POSProfile (`taxes_and_charges`); URY puts a `default_tax_template` on the
-  Restaurant. RestPOS uses only the Restaurant-level attachment — simpler for
+  Restaurant. Spicy uses only the Restaurant-level attachment — simpler for
   single-site (one restaurant = one tax config). Phase 7 reads
   `restaurant.default_tax_template` at order time. The POSProfile `taxes_and_charges`
   and `tax_category` fields are not ported.
@@ -1450,7 +1450,7 @@ Terminal Configuration), A5 partial (Tax template — later removed)
   child-table `printer_settings` approach.
 
 - **`POSOpeningEntry.pos_profile` is a nullable FK in Phase 6.** ERPNext requires it (`reqd:1`).
-  RestPOS adds it as nullable to avoid breaking existing Phase 5 opening entries. The FK is not
+  Spicy adds it as nullable to avoid breaking existing Phase 5 opening entries. The FK is not
   enforced as NOT NULL until Phase 7 (orders) requires it for order creation. Additive migration —
   no data backfill needed since Phase 5 entries predate POSProfile.
 
@@ -1466,11 +1466,11 @@ Terminal Configuration), A5 partial (Tax template — later removed)
   (exactly one default per profile — ERPNext validation) and `allow_in_returns`.
 
 - **`ProductionUnit.branch` and `warehouse` are stored, auto-set from `pos_profile` in `save()`.**
-  Matches the RestPOS denormalization pattern (see `Table.branch`).
+  Matches the Spicy denormalization pattern (see `Table.branch`).
   Avoids stale data by re-setting on every save. Deviates from URY which uses `fetch_from` display
   fields.
 
-- **`ProductionUnit.item_groups` child table dropped.** FEATURES.md A3 #14 explicitly states RestPOS
+- **`ProductionUnit.item_groups` child table dropped.** FEATURES.md A3 #14 explicitly states Spicy
   routes tickets by the `department` flag on each item, not by item-group mappings. The URY
   `item_groups` child is redundant.
 
@@ -1498,7 +1498,7 @@ Terminal Configuration), A5 partial (Tax template — later removed)
 - **`utm_source`, `utm_campaign`, `utm_medium`, `ignore_pricing_rule`, `letter_head`, `tc_name`,
   `select_print_heading` dropped.** Marketing analytics irrelevant to a local restaurant POS / no
   ERPNext pricing-rule engine / ERPNext print cosmetics. `print_format` kept (consumed by URY API;
-  Phase 12 defines RestPOS print formats).
+  Phase 12 defines Spicy print formats).
 
 #### Models (6 total)
 
@@ -1632,14 +1632,14 @@ All models extend `apps.utils.models.BaseModel`.
 | Field | Type | Source | Notes |
 |---|---|---|---|
 | name | CharField, max_length=100, required | URY `production` (autoname source) | e.g. "Kitchen", "Bar" |
-| pos_profile | ForeignKey→POSProfile, on_delete=PROTECT, null=True, blank=True, related_name="production_units" | URY core | nullable for RestPOS flexibility (unit can exist without a profile) |
+| pos_profile | ForeignKey→POSProfile, on_delete=PROTECT, null=True, blank=True, related_name="production_units" | URY core | nullable for Spicy flexibility (unit can exist without a profile) |
 | branch | ForeignKey→settings.Branch, on_delete=PROTECT, related_name="production_units" | URY `fetch_from pos_profile.branch` | stored (denormalized); auto-set from `pos_profile.branch` or `Branch.get_default()` in `save()` |
 | warehouse | ForeignKey→inventory.Warehouse, on_delete=PROTECT, related_name="production_units" | URY `fetch_from pos_profile.warehouse` | stored (denormalized); auto-set from `pos_profile.warehouse` in `save()` if blank |
-| department | CharField, max_length=10, choices: FOOD / DRINKS, required | RestPOS-specific | drives ticket routing per FEATURES #14 |
+| department | CharField, max_length=10, choices: FOOD / DRINKS, required | Spicy-specific | drives ticket routing per FEATURES #14 |
 | block_takeaway_kot | BooleanField, default=False | URY `custom_block_takeaway_kot` (on printer settings) | FEATURES #15 — suppresses ticket for takeaway orders |
-| printer_ip | CharField, max_length=50, blank=True | RestPOS-specific (replaces URY `printer_settings` child) | LAN printer static IP; Phase 12 migrates to FK→PrinterConfig |
-| printer_paper_width | CharField, max_length=10, choices: WIDTH_58MM / WIDTH_80MM, default=WIDTH_80MM | RestPOS-specific | ESC/POS paper width |
-| printer_cut_mode | CharField, max_length=15, choices: FULL_CUT / PARTIAL_CUT / NO_CUT, default=FULL_CUT | RestPOS-specific | ESC/POS cut mode |
+| printer_ip | CharField, max_length=50, blank=True | Spicy-specific (replaces URY `printer_settings` child) | LAN printer static IP; Phase 12 migrates to FK→PrinterConfig |
+| printer_paper_width | CharField, max_length=10, choices: WIDTH_58MM / WIDTH_80MM, default=WIDTH_80MM | Spicy-specific | ESC/POS paper width |
+| printer_cut_mode | CharField, max_length=15, choices: FULL_CUT / PARTIAL_CUT / NO_CUT, default=FULL_CUT | Spicy-specific | ESC/POS cut mode |
 
 **Methods:**
 - `__str__` returns `name`
@@ -1649,7 +1649,7 @@ All models extend `apps.utils.models.BaseModel`.
 - Meta: `ordering = ["name"]`, `unique_together = [("name", "branch")]`
 
 **Dropped from URY:**
-- `item_groups` child table (RestPOS routes by department, not item groups)
+- `item_groups` child table (Spicy routes by department, not item groups)
 - `enable_order_type_wise_display_on_mosaic` (KDS/Mosaic out of scope)
 - `order_type` child table (KDS out of scope)
 - `printer_settings` child table (folded into `printer_*` fields; Phase 12 may extract)
@@ -1797,21 +1797,21 @@ Register all 6 models with `list_display`, `list_filter`, `search_fields`, `list
 
 | Deviation | Reason |
 |---|---|
-| TaxTemplate attached to Restaurant only (not POSProfile) | ERPNext = per-profile; URY = per-restaurant. RestPOS uses restaurant-only — simpler for a single-site restaurant. POSProfile `taxes_and_charges` and `tax_category` dropped. |
+| TaxTemplate attached to Restaurant only (not POSProfile) | ERPNext = per-profile; URY = per-restaurant. Spicy uses restaurant-only — simpler for a single-site restaurant. POSProfile `taxes_and_charges` and `tax_category` dropped. |
 | Printer config as string fields on ProductionUnit (not child table) | Phase 12 owns PrinterConfig model; storing strings now avoids a cross-phase stub. Phase 12 migrates. |
 | `POSOpeningEntry.pos_profile` nullable (not required) | Phase 5 entries predate POSProfile. ERPNext requires it; Phase 7 may enforce NOT NULL. |
 | Role-permission M2Ms and KOT delay trio dropped from POSProfile | Cashier-only POS; no waiter/table-order role split, no transfer roles, no KOT delay alerts (#36–#38, #59, #74). |
 | `POSProfileUser` and `POSProfilePayment` as through models (not child tables) | Django M2M-through pattern; preserves per-row flags (`is_default`, `is_main_cashier`, `allow_in_returns`). `POSProfileUser` dropped in single-profile refactor. |
 | `multiple_cashier` field not ported onto `POSProfile` | URY `custom_enable_multiple_cashier` drives a main/sub-cashier shift hierarchy (separate shifts, sub-cashier sub-closings, main-shown reconciliation). The project has one shared session per branch (§6.5), so the field carried no behaviour and was removed to avoid dead schema. The supporting `POSProfileUser.is_main_cashier` flag is gone with `POSProfileUser` (above). |
-| POSProfile limited to one per Restaurant | ERPNext/URY allow multiple profiles per branch (multi-terminal configs). RestPOS is single-site — one POS terminal = one profile. Singleton enforced via `unique_together`. POS profile UI is a settings page, not a list/create/detail CRUD. |
-| `ProductionUnit.branch`/`warehouse` stored (not `fetch_from` display) | RestPOS denormalization pattern (matches `Table.branch`); auto-set in `save()`. |
-| `item_groups` child on ProductionUnit dropped | RestPOS routes by department flag, not item-group mappings (FEATURES #14). |
+| POSProfile limited to one per Restaurant | ERPNext/URY allow multiple profiles per branch (multi-terminal configs). Spicy is single-site — one POS terminal = one profile. Singleton enforced via `unique_together`. POS profile UI is a settings page, not a list/create/detail CRUD. |
+| `ProductionUnit.branch`/`warehouse` stored (not `fetch_from` display) | Spicy denormalization pattern (matches `Table.branch`); auto-set in `save()`. |
+| `item_groups` child on ProductionUnit dropped | Spicy routes by department flag, not item-group mappings (FEATURES #14). |
 | Aggregator Settings, QZ printing, KDS/Mosaic, KOT audio alert dropped | Out of scope per AGENTS.md. |
 | `customer`, `customer_groups`, `utm_*`, `ignore_pricing_rule`, `letter_head`, `tc_name`, `select_print_heading` dropped | No Customer model / irrelevant to local restaurant POS / ERPNext print cosmetics. |
 | Accounting fields (`cost_center`, `income_account`, etc.) as CharField, optional | Phase 8 introduces `LedgerAccount` and migrates to FK; FEATURES #40 mandatory deferred. |
 | `currency` hardcoded to "NGN" default | Single-currency. |
-| `selling_price_list` kept but Phase 7 ignores it | ERPNext alignment; RestPOS resolves pricing from active menu. |
-| `restaurant` field on POSProfile auto-set from branch | URY has it as user-selected; RestPOS single-site auto-derives. |
+| `selling_price_list` kept but Phase 7 ignores it | ERPNext alignment; Spicy resolves pricing from active menu. |
+| `restaurant` field on POSProfile auto-set from branch | URY has it as user-selected; Spicy single-site auto-derives. |
 | KOT config fields modeled now, enforced in Phase 7/8 | Config toggles consumed by orders/printing apps; modeling now keeps POSProfile complete. |
 
 #### Implementation steps
@@ -1867,7 +1867,7 @@ detection were never built — the §6.17 decision (cancel-and-replace, no diffi
 | `references/ury-develop/ury/ury/doctype/ury_kot_items/ury_kot_items.json` | KOT item fields (item, item_name, quantity, cancelled_qty, comments, course) |
 | `references/ury-develop/ury/ury/api/ury_kot_generate.py` | KOT diffing engine (studied; §6.17 replaced diff-sync with cancel-and-replace) |
 | `references/ury-develop/ury/ury/hooks/ury_pos_invoice.py` | POS Invoice event hooks: before_insert, validate, before_submit, on_cancel — invoice print enforcement, item modification lock |
-| `references/ury-develop/ury/ury/hooks/ury_kot_order_number.py` | Sequential order number logic (session-based in URY; RestPOS implements continuous numbering via §6.15) |
+| `references/ury-develop/ury/ury/hooks/ury_kot_order_number.py` | Sequential order number logic (session-based in URY; Spicy implements continuous numbering via §6.15) |
 | `references/erpnext-develop/erpnext/accounts/doctype/pos_invoice/pos_invoice.json` | POS Invoice fields: totals, discount, rounding, payments, outstanding, write-off, status |
 | `references/erpnext-develop/erpnext/accounts/doctype/pos_invoice/pos_invoice.py` | validate, validate_change_amount, set_outstanding_amount, set_status, before_submit, on_cancel |
 | `references/erpnext-develop/erpnext/accounts/doctype/pos_invoice_item/pos_invoice_item.json` | Invoice item fields: qty, rate, amount, warehouse, item_group |
@@ -2059,7 +2059,7 @@ original order, negative qty, cannot exceed quantity sold).
    "Order Modified"/"Partially Cancelled" tickets.
 
 **Grouped cart UI (guest stepper + split presentation):**
-- **References:** AGENTS.md "Customer card / group ordering"; FEATURES.md #214–#218; URY `OrderPanel.tsx` cart structure (RestPOS-specific group ordering — no URY reference exists, URY hardcodes `no_of_pax=1`).
+- **References:** AGENTS.md "Customer card / group ordering"; FEATURES.md #214–#218; URY `OrderPanel.tsx` cart structure (Spicy-specific group ordering — no URY reference exists, URY hardcodes `no_of_pax=1`).
 - **Model:** no schema change — reuses `Order.guest_count` + `OrderItem.customer_index`.
 - **New logic:** `Order.change_guest_count(new_count)` — raises `ValidationError` when lowering below the highest `customer_index` that still has items (error message "Remove Customer N's items first"); otherwise saves the new count. `pos_order_update_meta` accepts either an absolute `guest_count` or a signed `guest_delta` (from the stepper), clamps to 1–50, and surfaces guard errors as a cart error banner.
 - **View context:** `_group_items_by_guest(order)` builds `guest_groups` (per-index items + subtotal) for the cart template; `active_card` stays the session-driven active guest.
@@ -2180,14 +2180,14 @@ status badges, empty states.
 | Deviation | Reason |
 |---|---|
 | Dedicated `Order` model instead of extending POS Invoice | Django has no Frappe doctype system; a dedicated model is cleaner in Django ORM |
-| `customer_index` on OrderItem and KOTItem | RestPOS-specific group ordering feature — no URY reference exists (URY hardcodes no_of_pax=1) |
+| `customer_index` on OrderItem and KOTItem | Spicy-specific group ordering feature — no URY reference exists (URY hardcodes no_of_pax=1) |
 | Continuous order numbering instead of URY's session-based / daily reset | Client decision (§6.15): every new order = last + 1, forever, via `OrderSequence` |
-| KOT routing by `Item.department` (FOOD/DRINKS) not by item_group | RestPOS uses a department flag on Item, not production-unit item_group mappings (#68, #260) |
+| KOT routing by `Item.department` (FOOD/DRINKS) not by item_group | Spicy uses a department flag on Item, not production-unit item_group mappings (#68, #260) |
 | `ticket_type` / `print_status` snapshot on KOT (separate from document `status`) | §6.17: separate document lifecycle from printer state; deliberate deviation from a single status field |
 | Send-to-kitchen is one-time (no diffing / no Order Modified / Partially Cancelled) | §6.17: after the first ticket, a draft is immutable — cancel and create a new order |
-| POS screen is full-screen with inline shift open | URY gates POS with backoffice "Switch to Desk"; RestPOS puts shift open inline (Phase 5 decision) |
+| POS screen is full-screen with inline shift open | URY gates POS with backoffice "Switch to Desk"; Spicy puts shift open inline (Phase 5 decision) |
 | Payment dialog is inline (HTMX partial) not a separate page | Better POS UX — cashier never leaves the order screen |
-| No `Order.waiter` field; no captain/waiter transfer; no waiter login | Waiters use physical dockets only. Cashier enters all orders and runs all POS activities. URY models waiters as system users (#59, #180, #189) — RestPOS does not. |
+| No `Order.waiter` field; no captain/waiter transfer; no waiter login | Waiters use physical dockets only. Cashier enters all orders and runs all POS activities. URY models waiters as system users (#59, #180, #189) — Spicy does not. |
 | Table transfer, KOT reprint (real transport), duplicate detection deferred (Phase 12) | Core flow first; printer transport is Phase 12 |
 | No KOT delay config or role-permission M2Ms on POSProfile | Cashier-only POS; delay alerts and waiter/table role gates not used |
 | No cashier % discount; no `Order.discount_amount`; no `enable_discount` / `apply_discount_on` / `allow_discount_change` | URY cashier discount dropped. Future coupon system will re-introduce discounts with fixed % codes, not free-form cashier entry. |
@@ -2444,7 +2444,7 @@ overridden here for readability; each fragment is used by exactly one parent tem
   printing occurs on submit but has no persisted print result or retry state.
 - URY `ury_kot_generate.py` — existing departmental routing and ticket item snapshots.
 - URY `ury_order.py` and `ury_pos_invoice.py` — cancellation and invoice lifecycle rules.
-- RestPOS `apps/orders/models.py`, `views_pos.py`, and `templates/pos/partials/cart/` — existing
+- Spicy `apps/orders/models.py`, `views_pos.py`, and `templates/pos/partials/cart/` — existing
   KOT diffing, clear, print, and action-bar implementation.
 
 **Client decision:** after the first kitchen/bar ticket is created, a draft order is immutable.
@@ -2553,18 +2553,18 @@ recipe, manufacturing, warehouse-role, or legacy-compatibility abstractions.
 
 | Reference file | What is retained or deliberately changed |
 |---|---|
-| `references/erpnext-develop/erpnext/stock/doctype/item/item.json` and `item.py` | Independent sales, stock, and purchase flags; RestPOS applies the confirmed receipt/POS rules below |
+| `references/erpnext-develop/erpnext/stock/doctype/item/item.json` and `item.py` | Independent sales, stock, and purchase flags; Spicy applies the confirmed receipt/POS rules below |
 | `references/erpnext-develop/erpnext/stock/doctype/bin/bin.json` | `actual_qty`, `reserved_qty`, valuation, and item+warehouse cache semantics |
-| `references/erpnext-develop/erpnext/stock/doctype/stock_entry/stock_entry.json` and `stock_entry.py` | Submit/cancel ledger workflow and transfer valuation; RestPOS narrows allowed purposes/routes |
+| `references/erpnext-develop/erpnext/stock/doctype/stock_entry/stock_entry.json` and `stock_entry.py` | Submit/cancel ledger workflow and transfer valuation; Spicy narrows allowed purposes/routes |
 | `references/erpnext-develop/erpnext/stock/doctype/stock_entry/services/material_transfer.py` | Required source/target warehouses and rejection of same-warehouse transfers |
 | `references/erpnext-develop/erpnext/stock/doctype/stock_reconciliation/stock_reconciliation.json` and `stock_reconciliation.py` | Count-to-ledger adjustment and cancellation reversal behavior |
 | `references/erpnext-develop/erpnext/stock/doctype/stock_reconciliation_item/stock_reconciliation_item.json` | Counted quantity/current quantity/valuation line shape |
 | `references/erpnext-develop/erpnext/stock/doctype/purchase_receipt/purchase_receipt.json` and `purchase_receipt.py` | Purchase receipt posting lifecycle and accepted warehouse concept |
 | `references/erpnext-develop/erpnext/accounts/doctype/pos_invoice/pos_invoice.json` and `pos_invoice.py` | POS item warehouse/update-stock and submit/cancel stock lifecycle used as the comparison point |
 | `references/ury-develop/ury/ury/doctype/ury_order/ury_order.py` | URY sets `update_stock=1` for the whole POS invoice; FOOD bypass below is an explicit deviation |
-| `references/ury-develop/ury/ury_pos/api.py` | URY exposes one POS Profile warehouse to POS; RestPOS retains one configured Bar/POS warehouse on Restaurant |
-| `references/ury-develop/ury/ury/doctype/ury_production_unit/ury_production_unit.json` | Production-unit warehouse linkage; RestPOS reuses it for Kitchen/Bar configuration rather than adding Warehouse roles |
-| `references/ury-develop/pos/src/components/MenuCard.tsx` and `MenuList.tsx` | Disabled-card interaction pattern; RestPOS applies it specifically to unavailable drinks |
+| `references/ury-develop/ury/ury_pos/api.py` | URY exposes one POS Profile warehouse to POS; Spicy retains one configured Bar/POS warehouse on Restaurant |
+| `references/ury-develop/ury/ury/doctype/ury_production_unit/ury_production_unit.json` | Production-unit warehouse linkage; Spicy reuses it for Kitchen/Bar configuration rather than adding Warehouse roles |
+| `references/ury-develop/pos/src/components/MenuCard.tsx` and `MenuList.tsx` | Disabled-card interaction pattern; Spicy applies it specifically to unavailable drinks |
 
 #### Model and configuration changes
 
@@ -2793,7 +2793,7 @@ dedicated POS shell component.
 
 | Deviation | Reason |
 |---|---|
-| URY POS is React; RestPOS is Django templates + HTMX + Alpine | Project hard rule — no React/Vue/DRF |
+| URY POS is React; Spicy is Django templates + HTMX + Alpine | Project hard rule — no React/Vue/DRF |
 | Add-ons are optional and become separate cart lines, not a bundled line | Keep item snapshots and ledger lines independent; server re-resolves every rate |
 | Parent + add-ons commit in one atomic block after full server validation | Prevents a partial cart write when an add-on is stale or removed from the menu |
 | Variants are templates excluded from the catalogue; sellable variants are standalone cards | User-confirmed scope decision (§6.19 review); avoids a variant-group dialog |
@@ -2801,7 +2801,7 @@ dedicated POS shell component.
 ### 6.22 POS Shell Navigation — Cashier Menu and Full-Width Footer
 
 The POS shell keeps the three-column workbench and cart actions unchanged while moving
-shell navigation into a full-width footer. The navbar uses the `RestPOS` text wordmark on
+shell navigation into a full-width footer. The navbar uses the `Spicy` text wordmark on
 the left and a cashier dropdown on the right. The dropdown contains the existing
 permission-aware Backoffice link, cashier Close shift link, and POST-preserving Sign out
 link. The footer is present across POS pages and centers icon-over-label navigation for
@@ -2836,14 +2836,14 @@ The cashier flow is unchanged: the auto-creation happens server-side inside `set
   the ticket is a production artifact with its own lifecycle (the industry's
   "auto-dispatch on payment" pattern exists in Toast/MISA/Vendion as a configurable
   behaviour, never as a payment gate).
-- RestPOS `apps/orders/services.py` (`settle_order`, `create_tickets`, `dispatch_tickets`),
+- Spicy `apps/orders/services.py` (`settle_order`, `create_tickets`, `dispatch_tickets`),
   `apps/orders/views_pos.py` (`pos_order_settle`, `pos_order_ticket_print`), and
   `templates/pos/order_history_detail.html` — current behaviour verified: `settle_order`
   has zero ticket logic; `create_tickets` is called only from `pos_order_sync`;
   `pos_order_ticket_print` allows retry only for `status__in=[DRAFT, CANCELLED]`.
 
 **Why a deviation:** ERPNext/URY never gate payment on tickets and leave dispatch to the send
-action. RestPOS keeps that (send stays the primary path) but adds the mandatory backstop
+action. Spicy keeps that (send stays the primary path) but adds the mandatory backstop
 because the bar is a separate business entity — an unsent paid bar order means the bar's
 production for that shift is unaccounted in its own P&L. The industry default (configurable
 auto-dispatch) is rejected: the client decided the rule is unconditional, and no setting

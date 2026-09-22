@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Restore a database snapshot produced by scripts/backup_db.sh.
 #
-# Usage: make restore ARGS='backups/restpos-<ts>.sql.gz [--yes] [--with-media backups/media-<ts>.tar.gz]'
+# Usage: make restore ARGS='backups/spicy-<ts>.sql.gz [--yes] [--with-media backups/media-<ts>.tar.gz]'
 set -euo pipefail
 
-POSTGRES_DB="${POSTGRES_DB:-restpos}"
+POSTGRES_DB="${POSTGRES_DB:-spicy}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 cd "$(dirname "$0")/.."

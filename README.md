@@ -1,6 +1,6 @@
-# RestPOS
+# Spicy
 
-RestPOS is a lightweight web-based POS for restaurant order management. Cashiers enter all orders and payments at the counter; waiters use physical dockets and do not access the system. It supports dine-in, delivery, takeaway, and related order types.
+Spicy is a lightweight web-based POS for restaurant order management. Cashiers enter all orders and payments at the counter; waiters use physical dockets and do not access the system. It supports dine-in, delivery, takeaway, and related order types.
 
 ## Documentation
 
@@ -66,10 +66,10 @@ This will create your virtual environment in the `.venv` directory of your proje
 
 *If you are using Docker you can skip these steps.*
 
-Create a database named `restpos`.
+Create a database named `spicy`.
 
 ```
-createdb restpos
+createdb spicy
 ```
 
 Create database migrations:
@@ -114,13 +114,13 @@ it is installed and running.
 You can run it using:
 
 ```bash
-celery -A restpos worker -l INFO --pool=solo
+celery -A spicy worker -l INFO --pool=solo
 ```
 
 Or with celery beat (for scheduled tasks):
 
 ```bash
-celery -A restpos worker -l INFO -B --pool=solo
+celery -A spicy worker -l INFO -B --pool=solo
 ```
 
 Note: Using the `solo` pool is recommended for development but not for production.

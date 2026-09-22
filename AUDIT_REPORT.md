@@ -1,7 +1,7 @@
-# RestPOS Codebase Audit Report
+# Spicy Codebase Audit Report
 
 **Date:** 2026-09-10
-**Scope:** Full codebase — `apps/` (accounting, inventory, orders, staff, users, settings, payments, menu, reports, web, utils), `restpos/`, `templates/`, `assets/`
+**Scope:** Full codebase — `apps/` (accounting, inventory, orders, staff, users, settings, payments, menu, reports, web, utils), `spicy/`, `templates/`, `assets/`
 **Method:** Static code review of 325 Python files + 131 templates, verified against code with `file:line` references. No changes made.
 **Reference baseline:** Costing is Perpetual Weighted-Average Cost (PWAC), not FIFO. All money fields are `DecimalField` — no `FloatField` for money in app models (verified clean).
 
@@ -311,7 +311,7 @@ Editing/deleting `ItemUOMConversion` after use unguarded; historical SLEs keep o
 POS sells unlimited food regardless of kitchen stock; food COGS entirely downstream of managers filing CONSUMPTION/WASTE recs. Day with food sales + no consumption count reports food COGS ₦0 (reads as excellent margin). No missing-consumption warning on P&L. Documented intent — flagging because absence of warning makes food theft invisible in margins.
 
 ### INFO — `dev_admin_bypass` escape hatch
-**Files:** `apps/utils/admin.py:4-12`, `apps/inventory/admin.py:31-77,158-170`, `restpos/settings.py:25` (`RESTPOS_DEV_ADMIN_BYPASS = DEBUG`)
+**Files:** `apps/utils/admin.py:4-12`, `apps/inventory/admin.py:31-77,158-170`, `spicy/settings.py:25` (`SPICY_DEV_ADMIN_BYPASS = DEBUG`)
 
 With flag on, superuser can add/edit/delete SLEs and rewrite submitted docs via admin — single switch disabling every ledger control. Verify off in production (tied to DEBUG; see §5).
 
@@ -320,7 +320,7 @@ With flag on, superuser can add/edit/delete SLEs and rewrite submitted docs via 
 ## 5. Security Concerns (Auth, Config, Django)
 
 ### HIGH — Known `SECRET_KEY` + insecure fallbacks if `.env` missing
-**File:** `restpos/settings.py:16,18,27` (verified)
+**File:** `spicy/settings.py:16,18,27` (verified)
 
 - `SECRET_KEY` defaults to `django-insecure-HjfWKVIxpdgt4NHh8q56GGVTdjDvKeYV32hlsbl1` — identical value committed in tracked `.env.example:9`.
 - `DEBUG` defaults `True`; `ALLOWED_HOSTS` defaults `["*"]`.
@@ -330,19 +330,19 @@ With flag on, superuser can add/edit/delete SLEs and rewrite submitted docs via 
 **Fix:** require real `SECRET_KEY` (fail boot if unset); `DEBUG=False`, explicit `ALLOWED_HOSTS` defaults.
 
 ### MEDIUM — Open self-signup, no approval gate, no rate-limiting
-**Files:** `restpos/settings.py:173-174,193`, `restpos/urls.py:13`, `apps/users/signals.py:11-13`, `apps/users/decorators.py:21-24`
+**Files:** `spicy/settings.py:173-174,193`, `spicy/urls.py:13`, `apps/users/signals.py:11-13`, `apps/users/decorators.py:21-24`
 
 Anyone on WiFi self-registers (username+password only), active immediately; signal only emails admins. Mitigation: no group → role-less users denied by all decorators — spam foothold, not direct escalation. No lockout (`axes`), captcha (TURNSTILE keys in `.env.example` unread in settings), rate-limit.
 
 **Fix:** gate/disable public signup, or manager-approval queue; add login rate-limit + idle timeout (shared terminal + `ACCOUNT_SESSION_REMEMBER=True` + default 2-week session = stale sessions).
 
 ### MEDIUM — Missing hardening flags; production settings opt-in
-**Files:** `restpos/settings.py` (no `SECURE_HSTS_*`, `NOSNIFF`, `REFERRER_POLICY`, `*_COOKIE_SECURE`, `SESSION_COOKIE_AGE`, CSP), `restpos/settings_production.py:4-10` (sets them, but nothing forces its use — no wiring in `Makefile`/`docker-compose.yml`)
+**Files:** `spicy/settings.py` (no `SECURE_HSTS_*`, `NOSNIFF`, `REFERRER_POLICY`, `*_COOKIE_SECURE`, `SESSION_COOKIE_AGE`, CSP), `spicy/settings_production.py:4-10` (sets them, but nothing forces its use — no wiring in `Makefile`/`docker-compose.yml`)
 
 `SESSION_COOKIE_NAME`/`CSRF_COOKIE_NAME` renamed (`settings.py:150-151`) but `HttpOnly`/`SameSite` left at Django defaults.
 
 ### LOW-MEDIUM — Email verification off + non-unique email
-**File:** `restpos/settings.py:178,193` (effective `"none"`), `:180` (`ACCOUNT_UNIQUE_EMAIL=False`)
+**File:** `spicy/settings.py:178,193` (effective `"none"`), `:180` (`ACCOUNT_UNIQUE_EMAIL=False`)
 
 Duplicate emails → password-reset ambiguity; same-email impersonation alongside open signup. Login limited to username (`:173`) containing impact.
 
@@ -357,7 +357,7 @@ Only risky if seed run outside dev — known creds on privileged manager account
 Unrecognized `role` value falls through after `user.groups.remove(...)` — user left role-less, no error. Admin can demote self/last admin → self-lockout (not escalation). No audit log of role changes.
 
 ### LOW-MEDIUM — Avatar upload: extension-only validation
-**Files:** `apps/users/models.py:12-14,20` (`FileField`, not `ImageField`; `uuid + "." + name.split('.')[-1]`), `apps/users/helpers.py:22-46` (extension + 5MB only; no MIME/magic-byte/PIL), `restpos/urls.py:26` (Django serves `MEDIA_URL` unconditionally)
+**Files:** `apps/users/models.py:12-14,20` (`FileField`, not `ImageField`; `uuid + "." + name.split('.')[-1]`), `apps/users/helpers.py:22-46` (extension + 5MB only; no MIME/magic-byte/PIL), `spicy/urls.py:26` (Django serves `MEDIA_URL` unconditionally)
 
 Script with `.jpg` extension uploads successfully. Stored-JS execution requires victim opening file URL directly (serving content-type dependent) — current risk low.
 
@@ -374,7 +374,7 @@ Bare username → `is_superuser`/`is_staff`, no confirmation/logging. Fat-finger
 Validate as IP/hostname when Phase-12 print agent built.
 
 ### INFO — Personal data in repo
-**Files:** `restpos/settings.py:243,284,291`, `restpos/settings_production.py:14` (`sanusio293@gmail.com` as `DEFAULT_FROM_EMAIL`/`ADMINS`/contact)
+**Files:** `spicy/settings.py:243,284,291`, `spicy/settings_production.py:14` (`sanusio293@gmail.com` as `DEFAULT_FROM_EMAIL`/`ADMINS`/contact)
 
 Functional but should be env-driven.
 
@@ -401,7 +401,7 @@ No chain-of-thought blocks or wrong/outdated comments. Style is generally WHY-ex
 - **Restatement one-liner:** `apps/orders/services.py:399` (`"""Remove a line from a draft order."""`).
 
 ### Style and maintainability
-- **Files over 200–300 lines (refactor candidates):** `apps/orders/services.py:1268`, `apps/inventory/services.py:1126`, `apps/orders/views_pos.py:1092`, `apps/inventory/views.py:1051`, `apps/inventory/models.py:980`, `apps/orders/models.py:689`, `apps/accounting/services.py:640`, `apps/inventory/forms.py:527`, `apps/accounting/models.py:503`, `apps/reports/services.py:375`, `apps/staff/views.py:364`, `apps/settings/models.py:322`, `restpos/settings.py:321`, `apps/accounting/views.py:308`.
+- **Files over 200–300 lines (refactor candidates):** `apps/orders/services.py:1268`, `apps/inventory/services.py:1126`, `apps/orders/views_pos.py:1092`, `apps/inventory/views.py:1051`, `apps/inventory/models.py:980`, `apps/orders/models.py:689`, `apps/accounting/services.py:640`, `apps/inventory/forms.py:527`, `apps/accounting/models.py:503`, `apps/reports/services.py:375`, `apps/staff/views.py:364`, `apps/settings/models.py:322`, `spicy/settings.py:321`, `apps/accounting/views.py:308`.
 - **Python 3.14-only unparenthesized `except A, B:` (PEP 758) — 10+ sites; breaks parsing on ≤3.13 and most external tooling.** Verified: system Python 3.12 `ast.parse` raises `SyntaxError` on `apps/orders/views_pos.py:166`. Ruff passes only because `target-version = "py314"`. Sites include `apps/orders/views_pos.py:166,317,649,668`; `apps/orders/services.py:88,94,890,907`; `apps/orders/views.py:257`; `apps/inventory/views.py:757,997`. **Recommendation:** parenthesize everywhere (`except (A, B):`) — identical semantics, portable, unblocks editors/CI running older Python.
 - **Bare `except Exception:` (5, all swallow-then-redirect with logging — acceptable but broad):** `apps/utils/forms.py:79` (`return None` in `_get_model_field` — hides real errors); `apps/staff/views.py:171,195,338,359`.
 - **Missing type hints on services:** zero `def .*->` in `apps/orders/services.py`, `apps/inventory/services.py`, `apps/accounting/services.py`, `apps/reports/services.py`, `apps/staff/services.py`. POS private helpers (`apps/orders/views_pos.py` 15/35: `_render_pos_surface`, `_home_or_redirect`, `_get_open_shift`, …) unannotated while public `pos_*` views fully hinted.
@@ -409,7 +409,7 @@ No chain-of-thought blocks or wrong/outdated comments. Style is generally WHY-ex
 - **Duplicated display-string join:** `apps/orders/services.py:195,540` (identical `"Food"/"Drinks"` join twice).
 - **`print()` in management commands (2):** `apps/users/management/commands/promote_user_to_superuser.py:20`, `apps/web/management/commands/send_test_email.py:20` (use `stdout.write`).
 - **PEP 8 120-char (6, all help_text/messages):** `apps/accounting/payables_models.py:36`, `apps/inventory/forms.py:106`, `apps/inventory/models.py:775`, `apps/menu/models.py:106`, `apps/reports/models.py:24`, `apps/settings/models.py:114`.
-- **Hardcoded personal strings:** `restpos/settings.py:243,284` (email), external `wikimedia.org` image URL (legitimate but env-worthy).
+- **Hardcoded personal strings:** `spicy/settings.py:243,284` (email), external `wikimedia.org` image URL (legitimate but env-worthy).
 
 ### Tests
 - **Coverage broad** (30+ files; `test_views.py (inventory)` 78 tests, `test_services.py (orders)` 42; no assert-less files outside helpers).
@@ -466,6 +466,6 @@ No `hx-get` mutates state (all mutations `hx-post`/POST); CSRF header + per-form
 
 ## 9. Files Reviewed (top-level)
 
-`apps/accounting/models.py, services.py, payables_models.py, views.py, payables_views.py` · `apps/inventory/models.py, services.py, views.py, forms.py, admin.py` · `apps/orders/models.py, services.py, views.py, views_pos.py, printing.py` · `apps/staff/models.py, services.py, views.py, forms.py` · `apps/users/models.py, views.py, decorators.py, signals.py, adapter.py, helpers.py` · `apps/settings/models.py, views.py, forms.py` · `apps/payments/models.py, views.py, forms.py` · `apps/menu/models.py, views.py` · `apps/reports/models.py, pnl_models.py, services.py, sources.py, views.py` · `apps/web/views.py, middleware` · `apps/utils/models.py, forms.py, admin.py` · `restpos/settings.py, settings_production.py, urls.py` · `templates/pos/`, `templates/backoffice/`, `templates/web/` · `assets/javascript/` · `docker-compose.yml`, `Makefile`, `.env.example`
+`apps/accounting/models.py, services.py, payables_models.py, views.py, payables_views.py` · `apps/inventory/models.py, services.py, views.py, forms.py, admin.py` · `apps/orders/models.py, services.py, views.py, views_pos.py, printing.py` · `apps/staff/models.py, services.py, views.py, forms.py` · `apps/users/models.py, views.py, decorators.py, signals.py, adapter.py, helpers.py` · `apps/settings/models.py, views.py, forms.py` · `apps/payments/models.py, views.py, forms.py` · `apps/menu/models.py, views.py` · `apps/reports/models.py, pnl_models.py, services.py, sources.py, views.py` · `apps/web/views.py, middleware` · `apps/utils/models.py, forms.py, admin.py` · `spicy/settings.py, settings_production.py, urls.py` · `templates/pos/`, `templates/backoffice/`, `templates/web/` · `assets/javascript/` · `docker-compose.yml`, `Makefile`, `.env.example`
 
 *End of report. All findings reference code as of 2026-09-10 working tree. Items marked Verified OK were checked and need no action.*

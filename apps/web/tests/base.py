@@ -22,7 +22,7 @@ class TestLoginRequiredViewBase(TestViewBase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.client = Client()
         cls.authenticated_client = Client()
         cls.user = CustomUser.objects.create_user(username="testing@example.com", password="12345")

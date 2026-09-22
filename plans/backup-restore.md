@@ -14,7 +14,7 @@ A Docker volume alone is explicitly not a backup.
 
 - `scripts/backup_db.sh` (new, executable): dumps via the running compose service so no
   new credentials are introduced —
-  `docker compose exec -T db pg_dump -U postgres restpos | gzip > backups/restpos-<ts>.sql.gz`
+  `docker compose exec -T db pg_dump -U postgres spicy | gzip > backups/spicy-<ts>.sql.gz`
   (`postgres:17` image in `docker-compose.yml:1-16`; db/user from compose, overridable by
   `POSTGRES_DB`/`POSTGRES_USER` env with the same defaults). Same run tars uploads:
   `tar -czf backups/media-<ts>.tar.gz media/`. Prints both absolute paths on success.

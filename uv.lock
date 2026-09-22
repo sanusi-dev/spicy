@@ -1061,7 +1061,7 @@ wheels = [
 ]
 
 [[package]]
-name = "restpos"
+name = "spicy"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

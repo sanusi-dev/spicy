@@ -18,7 +18,7 @@ class StaffViewTestBase(TestCase):
         cls.user = CustomUser.objects.create_user(
             username="manager@test.com", password="testpass123", email="manager@test.com"
         )
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
         cls.restaurant = Restaurant.objects.create(company="Staff Views Co")
         cls.accounts = setup_chart_of_accounts(cls.restaurant)
@@ -57,7 +57,7 @@ class TestShiftPagesRequireBackofficeAccess(TestCase):
         cls.cashier = CustomUser.objects.create_user(
             username="cashier@test.com", password="testpass123", email="cashier@test.com"
         )
-        cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
         cls.cashier.groups.add(cashier_group)
 
     def setUp(self):

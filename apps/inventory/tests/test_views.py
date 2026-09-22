@@ -29,7 +29,7 @@ class InventoryViewTestBase(TestCase):
         cls.user = CustomUser.objects.create_user(
             username="admin@test.com", password="testpass123", email="admin@test.com"
         )
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
         cls.uom = UOM.objects.create(name="Nos")
         cls.group = ItemGroup.objects.create(name="Food")

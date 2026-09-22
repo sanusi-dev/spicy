@@ -20,7 +20,7 @@ class ClosingZReportBase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = CustomUser.objects.create_user(username="manager", password="testpass123")
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
         cls.restaurant = Restaurant.objects.create(company="Z Co")
         cls.accounts = setup_chart_of_accounts(cls.restaurant)

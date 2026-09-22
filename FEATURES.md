@@ -1,4 +1,4 @@
-# RestPOS — Feature Specification
+# Spicy — Feature Specification
 
 This document specifies what the system does, organised by back office, POS frontend, and
 cross-cutting areas. **Planned** features (section E) are specified but not yet implemented.

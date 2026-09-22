@@ -14,7 +14,7 @@ class PaymentsViewTestBase(TestCase):
         cls.user = CustomUser.objects.create_user(
             username="admin@test.com", password="testpass123", email="admin@test.com"
         )
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
         cls.accounts = create_payment_accounts()
         # Use test-only names so we don't conflict with the seed migration's defaults.

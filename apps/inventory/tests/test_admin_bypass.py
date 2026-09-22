@@ -24,7 +24,7 @@ class DevAdminBypassTest(TestCase):
         request.user = user
         return request
 
-    @override_settings(RESTPOS_DEV_ADMIN_BYPASS=True)
+    @override_settings(SPICY_DEV_ADMIN_BYPASS=True)
     def test_superuser_skips_lock_when_bypass_on(self):
         request = self._request(self.superuser)
         self.assertTrue(dev_admin_bypass(request))
@@ -32,14 +32,14 @@ class DevAdminBypassTest(TestCase):
         self.assertTrue(self.admin.has_delete_permission(request, self.entry))
         self.assertEqual(list(self.admin.get_readonly_fields(request, self.entry)), [])
 
-    @override_settings(RESTPOS_DEV_ADMIN_BYPASS=True)
+    @override_settings(SPICY_DEV_ADMIN_BYPASS=True)
     def test_non_superuser_stays_locked_when_bypass_on(self):
         request = self._request(self.staff)
         self.assertFalse(dev_admin_bypass(request))
         self.assertFalse(self.admin.has_change_permission(request, self.entry))
         self.assertFalse(self.admin.has_delete_permission(request, self.entry))
 
-    @override_settings(RESTPOS_DEV_ADMIN_BYPASS=False)
+    @override_settings(SPICY_DEV_ADMIN_BYPASS=False)
     def test_superuser_stays_locked_when_bypass_off(self):
         request = self._request(self.superuser)
         self.assertFalse(dev_admin_bypass(request))

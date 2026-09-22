@@ -14,7 +14,7 @@ default_context:
   css_framework: tailwind
   database: postgres
   deploy_platform: none
-  description: RestPOS is a light weight and easy to use web-based application designed
+  description: Spicy is a light weight and easy to use web-based application designed
     for streamlined order management. It serves as an efficient tool for both cashiers
     and captains, facilitating order processing at the cash counter and tables.It
     supports various order types, including dine-in, delivery, takeout and Aggregator.
@@ -31,8 +31,8 @@ default_context:
   marketing_email_platform: none
   plugins: []
   post_process: y
-  project_name: RestPOS
-  project_slug: restpos
+  project_name: Spicy
+  project_slug: spicy
   python_package_manager: uv
   standalone_front_end: none
   stripe_payment_mode: checkout

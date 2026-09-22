@@ -73,7 +73,7 @@ class ReviewFixBase(OrderAccountingMixin, TestCase):
             defaults={"name": "Bar", "warehouse": cls.bar},
         )
         cls.user = CustomUser.objects.create_user(username="rev-cashier", password="pass")
-        cls.user.groups.add(Group.objects.get(name="RestPOS Cashier"))
+        cls.user.groups.add(Group.objects.get(name="Spicy Cashier"))
 
     def setUp(self):
         self.client.force_login(self.user)

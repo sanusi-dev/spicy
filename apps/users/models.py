@@ -45,15 +45,15 @@ class CustomUser(AbstractUser):
 
     @property
     def is_admin(self):
-        return self.is_superuser or self.groups.filter(name="RestPOS Admin").exists()
+        return self.is_superuser or self.groups.filter(name="Spicy Admin").exists()
 
     @property
     def is_manager(self):
-        return self.groups.filter(name="RestPOS Manager").exists()
+        return self.groups.filter(name="Spicy Manager").exists()
 
     @property
     def is_cashier(self):
-        return self.groups.filter(name="RestPOS Cashier").exists()
+        return self.groups.filter(name="Spicy Cashier").exists()
 
     @property
     def has_backoffice_access(self):

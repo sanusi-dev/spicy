@@ -1,9 +1,9 @@
-"""WSGI config for RestPOS."""
+"""WSGI config for Spicy."""
 
 import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "restpos.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "spicy.settings")
 
 application = get_wsgi_application()

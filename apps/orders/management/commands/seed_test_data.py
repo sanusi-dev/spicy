@@ -104,17 +104,17 @@ class Command(BaseCommand):
 
         cashier, created = CustomUser.objects.get_or_create(
             username="cashier",
-            defaults={"email": "cashier@restpos.test", "first_name": "Amina", "last_name": "Bello"},
+            defaults={"email": "cashier@spicy.test", "first_name": "Amina", "last_name": "Bello"},
         )
         if created:
             cashier.set_password("pos1234")
             cashier.save(update_fields=["password"])
-        cashier.groups.add(Group.objects.get(name="RestPOS Cashier"))
+        cashier.groups.add(Group.objects.get(name="Spicy Cashier"))
 
         manager, created = CustomUser.objects.get_or_create(
             username="manager",
             defaults={
-                "email": "manager@restpos.test",
+                "email": "manager@spicy.test",
                 "first_name": "Emeka",
                 "last_name": "Nwosu",
                 "is_staff": True,
@@ -123,7 +123,7 @@ class Command(BaseCommand):
         if created:
             manager.set_password("manager1234")
             manager.save(update_fields=["password"])
-        manager.groups.add(Group.objects.get(name="RestPOS Manager"))
+        manager.groups.add(Group.objects.get(name="Spicy Manager"))
         return cashier, manager
 
     def _ensure_stock(self):

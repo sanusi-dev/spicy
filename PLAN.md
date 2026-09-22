@@ -1,4 +1,4 @@
-# RestPOS — Implementation Plan
+# Spicy — Implementation Plan
 
 This document is the implementation roadmap. Section 3 tracks the build sequence; Section 4
 holds decision-only detailed plans for the unbuilt phases. Product facts live in `FEATURES.md`
@@ -6,7 +6,7 @@ and `docs/`; working conventions live in `AGENTS.md`.
 
 ## 1. Project Overview
 
-RestPOS is a restaurant POS and management system for a single Nigerian restaurant location:
+Spicy is a restaurant POS and management system for a single Nigerian restaurant location:
 cashier-operated ordering, kitchen/bar ticket printing, payments, shifts, inventory, and a
 food-vs-drinks departmental split. It runs entirely on the local network with no internet
 dependency. The full product specification is in `FEATURES.md`; the tech stack and coding
@@ -537,7 +537,7 @@ per-unit returns accounts.
   locked to OPENING; a read-only review screen precedes the submit confirmation; once
   submitted the entry is immutable like every JE.
 - No import wizard and no journal-import screen.
-- Go-live prerequisite when RestPOS is the accounting source of truth.
+- Go-live prerequisite when Spicy is the accounting source of truth.
 
 **Tests:** OPENING submit sets `is_opening`; balanced-openings + remark requirements; second
 opening JE for the same fiscal year rejected; review screen requires explicit submit; amend

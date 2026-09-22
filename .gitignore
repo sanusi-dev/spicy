@@ -9,8 +9,8 @@ venv
 db.sqlite3
 .sass-cache/
 celerybeat-schedule
-restpos/localsettings.py
-restpos/local.py
+spicy/localsettings.py
+spicy/local.py
 static_root/
 node_modules/
 # ai assistants
@@ -42,8 +42,8 @@ references/
 
 # local scratch / prototype files
 landing-after-optimization.png
-restpos_interactive_landing_page*.html
-restpos/templates/
+spicy_interactive_landing_page*.html
+spicy/templates/
 scripts/inspect_db.py
 
 # opencode session data

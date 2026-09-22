@@ -1,4 +1,4 @@
-"""Django settings for RestPOS."""
+"""Django settings for Spicy."""
 
 import os
 import sys
@@ -22,7 +22,7 @@ ENABLE_DEBUG_TOOLBAR = env.bool("ENABLE_DEBUG_TOOLBAR", default=False) and "test
 # locks, hard permission blocks, readonly field lists) while this is on. It is
 # tied to DEBUG so it vanishes automatically when the product goes live. The
 # restriction code itself stays untouched.
-RESTPOS_DEV_ADMIN_BYPASS = DEBUG
+SPICY_DEV_ADMIN_BYPASS = DEBUG
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
 
@@ -90,7 +90,7 @@ if DEBUG:
 if DEBUG:
     INSTALLED_APPS.append("django_watchfiles")
 
-ROOT_URLCONF = "restpos.urls"
+ROOT_URLCONF = "spicy.urls"
 
 # Cached template loaders are disabled under DEBUG so edits show without restart.
 _DEFAULT_LOADERS = [
@@ -124,7 +124,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "restpos.wsgi.application"
+WSGI_APPLICATION = "spicy.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
@@ -136,7 +136,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": env("DJANGO_DATABASE_NAME", default="restpos"),
+            "NAME": env("DJANGO_DATABASE_NAME", default="spicy"),
             "USER": env("DJANGO_DATABASE_USER", default="postgres"),
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
@@ -147,8 +147,8 @@ else:
 # Auth and Login
 
 AUTH_USER_MODEL = "users.CustomUser"
-SESSION_COOKIE_NAME = "restpos_sessionid"
-CSRF_COOKIE_NAME = "restpos_csrftoken"
+SESSION_COOKIE_NAME = "spicy_sessionid"
+CSRF_COOKIE_NAME = "spicy_csrftoken"
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "/"
 
@@ -169,7 +169,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Allauth
 
-ACCOUNT_ADAPTER = "apps.users.adapter.RestPOSAccountAdapter"
+ACCOUNT_ADAPTER = "apps.users.adapter.SpicyAccountAdapter"
 ACCOUNT_LOGIN_METHODS = {"username"}
 ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 
@@ -244,7 +244,7 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="sanusio293@gmail.com")
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 
-EMAIL_SUBJECT_PREFIX = "[RestPOS] "
+EMAIL_SUBJECT_PREFIX = "[Spicy] "
 
 SITE_ID = 1
 
@@ -274,10 +274,10 @@ SCHEDULED_TASKS: dict[str, Any] = {}
 
 
 PROJECT_METADATA = {
-    "NAME": gettext_lazy("RestPOS"),
+    "NAME": gettext_lazy("Spicy"),
     "URL": "http://localhost:8000",
     "DESCRIPTION": gettext_lazy(
-        "RestPOS is a lightweight POS for restaurant order management. Cashiers "
+        "Spicy is a lightweight POS for restaurant order management. Cashiers "
         "enter all orders and payments; waiters use physical dockets and do not "
         "access the system."
     ),
@@ -311,7 +311,7 @@ LOGGING = {
         },
         "apps": {
             "handlers": ["console"],
-            "level": env("RESTPOS_LOG_LEVEL", default="INFO"),
+            "level": env("SPICY_LOG_LEVEL", default="INFO"),
         },
         "pegasus": {
             "handlers": ["console"],

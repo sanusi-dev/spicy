@@ -13,9 +13,9 @@ class UserConfig(AppConfig):
         # These names are the stable role identifiers used by CustomUser's
         # permission properties, so keep seed data and authorization aligned.
         def create_roles(**kwargs):
-            Group.objects.get_or_create(name="RestPOS Admin")
-            Group.objects.get_or_create(name="RestPOS Manager")
-            Group.objects.get_or_create(name="RestPOS Cashier")
+            Group.objects.get_or_create(name="Spicy Admin")
+            Group.objects.get_or_create(name="Spicy Manager")
+            Group.objects.get_or_create(name="Spicy Cashier")
 
         post_migrate.connect(create_roles)
 

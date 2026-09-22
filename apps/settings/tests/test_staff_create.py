@@ -15,9 +15,9 @@ class StaffCreateTestBase(TestCase):
             username="admin@test.com", password="testpass123", email="admin@test.com"
         )
         cls.manager = CustomUser.objects.create_user(username="manager", password="testpass123")
-        cls.manager.groups.add(Group.objects.get_or_create(name="RestPOS Manager")[0])
+        cls.manager.groups.add(Group.objects.get_or_create(name="Spicy Manager")[0])
         cls.cashier = CustomUser.objects.create_user(username="cashier", password="testpass123")
-        cls.cashier.groups.add(Group.objects.get_or_create(name="RestPOS Cashier")[0])
+        cls.cashier.groups.add(Group.objects.get_or_create(name="Spicy Cashier")[0])
 
     def _create_payload(self, **kwargs):
         payload = {
@@ -43,14 +43,14 @@ class StaffCreateViewTest(StaffCreateTestBase):
         self.assertTrue(user.is_active)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
-        self.assertEqual({group.name for group in user.groups.all()}, {"RestPOS Cashier"})
+        self.assertEqual({group.name for group in user.groups.all()}, {"Spicy Cashier"})
         self.assertTrue(user.has_staff_role)
         self.assertEqual(user.first_name, "New")
 
     def test_admin_creates_manager(self):
         self.client.post(reverse("settings:staff_create"), self._create_payload(username="mgr", role="manager"))
         user = CustomUser.objects.get(username="mgr")
-        self.assertEqual({group.name for group in user.groups.all()}, {"RestPOS Manager"})
+        self.assertEqual({group.name for group in user.groups.all()}, {"Spicy Manager"})
         self.assertTrue(user.has_staff_role)
 
     def test_admin_creates_admin(self):
@@ -58,7 +58,7 @@ class StaffCreateViewTest(StaffCreateTestBase):
         user = CustomUser.objects.get(username="boss")
         self.assertTrue(user.is_superuser)
         self.assertTrue(user.is_staff)
-        self.assertEqual({group.name for group in user.groups.all()}, {"RestPOS Admin"})
+        self.assertEqual({group.name for group in user.groups.all()}, {"Spicy Admin"})
 
     def test_duplicate_username_rejected_any_case(self):
         CustomUser.objects.create_user(username="Newbie", password="testpass123")
@@ -132,7 +132,7 @@ class StaffToggleActiveTest(StaffCreateTestBase):
 
     def test_role_removal_flow_untouched(self):
         target = CustomUser.objects.create_user(username="leaver", password="testpass123")
-        target.groups.add(Group.objects.get_or_create(name="RestPOS Cashier")[0])
+        target.groups.add(Group.objects.get_or_create(name="Spicy Cashier")[0])
         self.client.post(reverse("settings:staff_remove_role", args=[target.pk]))
         target.refresh_from_db()
         self.assertTrue(target.is_active)

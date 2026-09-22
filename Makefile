@@ -24,7 +24,7 @@ django: ## Run Django dev server
 	@uv run manage.py runserver
 
 celery: ## Start Celery and celery beat
-	@uv run celery -A restpos worker -l INFO --beat --pool=solo
+	@uv run celery -A spicy worker -l INFO --beat --pool=solo
 
 manage: ## Run any manage.py command. E.g. `make manage ARGS='createsuperuser'`
 	@uv run manage.py ${ARGS}
@@ -34,7 +34,7 @@ migrations: ## Create DB migrations in the container
 
 migrate: ## Run DB migrations in the container
 	@echo "Waiting for database to be ready..."
-	@until docker compose exec db pg_isready -d restpos -U postgres >/dev/null 2>&1; do echo "Database not ready, waiting..."; sleep 2; done
+	@until docker compose exec db pg_isready -d spicy -U postgres >/dev/null 2>&1; do echo "Database not ready, waiting..."; sleep 2; done
 	@echo "Database is ready, running migrations..."
 	@uv run manage.py migrate
 
@@ -42,16 +42,16 @@ shell: ## Get a Django shell
 	@uv run manage.py shell
 
 dbshell: ## Get a Database shell
-	@docker compose exec db psql -U postgres restpos
+	@docker compose exec db psql -U postgres spicy
 
 backup: ## Snapshot the database + media into backups/
 	@./scripts/backup_db.sh
 
-restore: ## Restore a snapshot: make restore ARGS='backups/restpos-<ts>.sql.gz [--yes]'
+restore: ## Restore a snapshot: make restore ARGS='backups/spicy-<ts>.sql.gz [--yes]'
 	@./scripts/restore_db.sh $(ARGS)
 
 drop-test-db:  ## Drop the test database (use when stuck from --keepdb)
-	@docker compose exec db psql -U postgres -c "DROP DATABASE IF EXISTS test_restpos WITH (FORCE)"
+	@docker compose exec db psql -U postgres -c "DROP DATABASE IF EXISTS test_spicy WITH (FORCE)"
 
 test: ## Run Django tests
 	@uv run manage.py test ${ARGS}

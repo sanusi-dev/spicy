@@ -21,10 +21,10 @@ class ShiftCashOutBase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.manager = CustomUser.objects.create_user(username="manager", password="testpass123")
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.manager.groups.add(mgr)
         cls.cashier = CustomUser.objects.create_user(username="cashier", password="testpass123")
-        cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
         cls.cashier.groups.add(cashier_group)
         cls.restaurant = Restaurant.objects.create(company="Cash-Out Co")
         cls.accounts = setup_chart_of_accounts(cls.restaurant)

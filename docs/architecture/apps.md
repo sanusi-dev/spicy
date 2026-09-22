@@ -120,7 +120,7 @@
 - `orders`: `seed_pos_setup` creates the Restaurant/warehouse/payment/production-unit configuration chain, invokes the chart-of-accounts seed first, and seeds the menu when needed.
 - `accounting`: `seed_chart_of_accounts` seeds the chart, current fiscal year, and GL wiring (idempotent).
 - `web`: `bootstrap_celery_tasks [--remove-stale]` synchronizes `settings.SCHEDULED_TASKS` to django-celery-beat; `send_test_email` exercises the configured email backend.
-- Celery is initialized in `restpos/celery.py` and points at Redis, but no project `tasks.py` module was found and `SCHEDULED_TASKS` is empty. There is no active periodic ticket or notification worker.
+- Celery is initialized in `spicy/celery.py` and points at Redis, but no project `tasks.py` module was found and `SCHEDULED_TASKS` is empty. There is no active periodic ticket or notification worker.
 
 ## Users
 

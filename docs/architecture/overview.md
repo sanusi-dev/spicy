@@ -2,13 +2,13 @@
 
 ## System Shape
 
-RestPOS is a Django monolith with server-rendered HTML. The cashier POS and manager backoffice share the same Django process, database, session store, templates, and domain services. HTMX replaces portions of the page; Alpine.js handles local UI state. There is no active REST API, React/Vue frontend, report app, customer app, or print-agent client in the current source tree.
+Spicy is a Django monolith with server-rendered HTML. The cashier POS and manager backoffice share the same Django process, database, session store, templates, and domain services. HTMX replaces portions of the page; Alpine.js handles local UI state. There is no active REST API, React/Vue frontend, report app, customer app, or print-agent client in the current source tree.
 
 ```mermaid
 flowchart TD
     Browser[Cashier or manager browser]
     Middleware[Django middleware\nAuth, access, HTMX, messages]
-    URLs[restpos/urls.py\nroute includes]
+    URLs[spicy/urls.py\nroute includes]
     Views[App views\nPOS, backoffice, web]
     Forms[Forms and formsets]
     Services[Order, inventory, staff services]
@@ -25,8 +25,8 @@ flowchart TD
 
 ## Project Boundaries
 
-- `restpos/` contains settings, root URLs, WSGI, and Celery configuration.
-- `apps/` contains the active project packages. They are top-level packages, not children of `restpos/`.
+- `spicy/` contains settings, root URLs, WSGI, and Celery configuration.
+- `apps/` contains the active project packages. They are top-level packages, not children of `spicy/`.
 - `templates/` contains the shared web shell, backoffice pages, POS pages, auth pages, and inline Django partials.
 - `assets/` contains Vite source JavaScript and CSS. `assets/javascript/site.js` is the main browser entry.
 - `media/` contains uploaded item/profile media and the default item image.
@@ -34,17 +34,17 @@ flowchart TD
 
 ## Runtime Request Lifecycle
 
-1. Django loads `restpos.settings`, including the custom user model and app URLs.
+1. Django loads `spicy.settings`, including the custom user model and app URLs.
 2. `AuthenticationMiddleware` sets `request.user`; `LoginRequiredMiddleware` redirects anonymous requests to login unless the view is `@login_not_required`.
 3. `HtmxMiddleware` exposes `request.htmx` to views and templates.
-4. A route in `restpos/urls.py` selects a web, POS, or backoffice view.
+4. A route in `spicy/urls.py` selects a web, POS, or backoffice view.
 5. Views parse request data, resolve records, and delegate multi-record changes to `apps.orders.services`, `apps.inventory.services`, or `apps.staff.services`.
 6. Model methods validate snapshots, status transitions, money, stock lines, and relationship constraints.
 7. The view renders a full page or a Django inline partial. HTMX replaces the requested target and `MessagesMiddleware` adds toast events where needed.
 
 ## URL Precedence Note
 
-`restpos/urls.py` includes `apps.orders.pos_urls` at `/pos/` before including `apps.web.urls`. `apps.web.urls` also declares `web:pos_index` at `/pos/`, but the earlier include wins for requests. The reverse name exists, but `web.views.pos_index()` is effectively shadowed by `pos:pos_home`.
+`spicy/urls.py` includes `apps.orders.pos_urls` at `/pos/` before including `apps.web.urls`. `apps.web.urls` also declares `web:pos_index` at `/pos/`, but the earlier include wins for requests. The reverse name exists, but `web.views.pos_index()` is effectively shadowed by `pos:pos_home`.
 
 ## Business Logic Placement
 
@@ -56,8 +56,8 @@ flowchart TD
 
 ## Infrastructure and Integrations
 
-- PostgreSQL: configured in `restpos/settings.py:136-151`; Docker service in `docker-compose.yml`.
-- Redis: configured for cache and Celery in `restpos/settings.py:288-308`; debug mode uses `DummyCache`.
+- PostgreSQL: configured in `spicy/settings.py:136-151`; Docker service in `docker-compose.yml`.
+- Redis: configured for cache and Celery in `spicy/settings.py:288-308`; debug mode uses `DummyCache`.
 - Authentication/email: django-allauth under `/accounts/`, Django email backend, and admin signup notifications.
 - Sites: `apps/web/meta.py` and `apps/web/migrations/0001_initial.py`.
 - Printing: `apps/orders/printing.py` currently returns successful simulated results. ProductionUnit stores printer settings, but no ESC/POS, HTTP, USB, LAN, or socket implementation exists.

@@ -1,4 +1,4 @@
-# RestPOS — Complete-Restaurant Verdict
+# Spicy — Complete-Restaurant Verdict
 
 **Question:** is what is left in `PLAN.md` actually what is left, if the goal is a functioning,
 lightweight but feature-rich single-location restaurant system?

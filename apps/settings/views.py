@@ -21,7 +21,7 @@ from .models import (
     Restaurant,
 )
 
-RESTPOS_GROUP_NAMES = ["RestPOS Admin", "RestPOS Manager", "RestPOS Cashier"]
+SPICY_GROUP_NAMES = ["Spicy Admin", "Spicy Manager", "Spicy Cashier"]
 
 
 class _HtmxRequest(HttpRequest):
@@ -32,10 +32,10 @@ def _is_htmx(request: HttpRequest) -> bool:
     return bool(cast(_HtmxRequest, request).htmx)
 
 
-def _ensure_restpos_groups():
-    """Fetch RestPOS role groups in one query, creating any missing ones. Returns dict keyed by name."""
-    groups = {group.name: group for group in Group.objects.filter(name__in=RESTPOS_GROUP_NAMES)}
-    for name in RESTPOS_GROUP_NAMES:
+def _ensure_spicy_groups():
+    """Fetch Spicy role groups in one query, creating any missing ones. Returns dict keyed by name."""
+    groups = {group.name: group for group in Group.objects.filter(name__in=SPICY_GROUP_NAMES)}
+    for name in SPICY_GROUP_NAMES:
         if name not in groups:
             groups[name] = Group.objects.create(name=name)
     return groups
@@ -46,7 +46,7 @@ def settings_dashboard(request: HttpRequest) -> HttpResponse:
     context = {
         "settings_configured": Restaurant.objects.exists(),
         "staff_count": CustomUser.objects.filter(
-            groups__name__in=["RestPOS Admin", "RestPOS Manager", "RestPOS Cashier"]
+            groups__name__in=["Spicy Admin", "Spicy Manager", "Spicy Cashier"]
         )
         .distinct()
         .count(),
@@ -80,9 +80,9 @@ def staff_list(request: HttpRequest) -> HttpResponse:
             | models.Q(first_name__icontains=search)
             | models.Q(last_name__icontains=search)
         )
-    # Prefetch only RestPOS role groups so the per-row role derivation hits the prefetch cache.
+    # Prefetch only Spicy role groups so the per-row role derivation hits the prefetch cache.
     users = users.prefetch_related(
-        models.Prefetch("groups", queryset=Group.objects.filter(name__in=RESTPOS_GROUP_NAMES))
+        models.Prefetch("groups", queryset=Group.objects.filter(name__in=SPICY_GROUP_NAMES))
     )
 
     staff_data = [_build_staff_entry(user) for user in users]
@@ -112,11 +112,11 @@ def staff_assign_role(request: HttpRequest, pk: int, role: str) -> HttpResponse:
 
 
 def _apply_role(user: CustomUser, role: str) -> None:
-    """Apply one RestPOS role: exactly one group plus the matching flags."""
-    groups = _ensure_restpos_groups()
-    admin_group = groups["RestPOS Admin"]
-    manager_group = groups["RestPOS Manager"]
-    cashier_group = groups["RestPOS Cashier"]
+    """Apply one Spicy role: exactly one group plus the matching flags."""
+    groups = _ensure_spicy_groups()
+    admin_group = groups["Spicy Admin"]
+    manager_group = groups["Spicy Manager"]
+    cashier_group = groups["Spicy Cashier"]
 
     user.groups.remove(admin_group, manager_group, cashier_group)
 
@@ -175,10 +175,10 @@ def staff_toggle_active(request: HttpRequest, pk: int) -> HttpResponse:
 @require_POST
 def staff_remove_role(request: HttpRequest, pk: int) -> HttpResponse:
     user = get_object_or_404(CustomUser, pk=pk)
-    groups = _ensure_restpos_groups()
-    admin_group = groups["RestPOS Admin"]
-    manager_group = groups["RestPOS Manager"]
-    cashier_group = groups["RestPOS Cashier"]
+    groups = _ensure_spicy_groups()
+    admin_group = groups["Spicy Admin"]
+    manager_group = groups["Spicy Manager"]
+    cashier_group = groups["Spicy Cashier"]
 
     if user.groups.filter(pk=admin_group.pk).exists():
         messages.error(request, "Cannot remove role from an Admin. Demote them to Manager first.")
@@ -194,11 +194,11 @@ def staff_remove_role(request: HttpRequest, pk: int) -> HttpResponse:
 
 def _build_staff_entry(user: CustomUser) -> dict[str, CustomUser | str]:
     user_group_names = {group.name for group in user.groups.all()}
-    if user.is_superuser or "RestPOS Admin" in user_group_names:
+    if user.is_superuser or "Spicy Admin" in user_group_names:
         role = "admin"
-    elif "RestPOS Manager" in user_group_names:
+    elif "Spicy Manager" in user_group_names:
         role = "manager"
-    elif "RestPOS Cashier" in user_group_names:
+    elif "Spicy Cashier" in user_group_names:
         role = "cashier"
     else:
         role = ""

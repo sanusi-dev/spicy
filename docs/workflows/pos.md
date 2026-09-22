@@ -2,7 +2,7 @@
 
 ## Surface and Access
 
-The active cashier surface is `apps/orders/views_pos.py`, mounted by `apps/orders/pos_urls.py` at `/pos/`. Views are gated by `@staff_required` in `apps/users/decorators.py` — any RestPOS role (Cashier included) passes; others get 403. The POS shell is `templates/pos/base.html`; `#pos-main` is the main HTMX target.
+The active cashier surface is `apps/orders/views_pos.py`, mounted by `apps/orders/pos_urls.py` at `/pos/`. Views are gated by `@staff_required` in `apps/users/decorators.py` — any Spicy role (Cashier included) passes; others get 403. The POS shell is `templates/pos/base.html`; `#pos-main` is the main HTMX target.
 
 ```mermaid
 flowchart LR

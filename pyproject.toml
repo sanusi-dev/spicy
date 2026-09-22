@@ -48,15 +48,15 @@ module = [
 disable_error_code = ["attr-defined", "assignment"]
 
 [tool.django-stubs]
-django_settings_module = "restpos.settings"
+django_settings_module = "spicy.settings"
 
 [tool.setuptools]
 py-modules = []
 
 [project]
-name = "restpos"
+name = "spicy"
 version = "0.1.0"
-description = "RestPOS is a light weight and easy to use web-based application designed for streamlined order management. It serves as an efficient tool for both cashiers and captains, facilitating order processing at the cash counter and tables.It supports various order types, including dine-in, delivery, takeout and Aggregator."
+description = "Spicy is a light weight and easy to use web-based application designed for streamlined order management. It serves as an efficient tool for both cashiers and captains, facilitating order processing at the cash counter and tables.It supports various order types, including dine-in, delivery, takeout and Aggregator."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

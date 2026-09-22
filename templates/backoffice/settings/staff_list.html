@@ -6,7 +6,7 @@
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 class="text-3xl font-extrabold tracking-tight text-gray-900">User roles</h1>
-        <p class="mt-2 max-w-2xl text-sm leading-5 text-gray-500">Assign the access level each team member needs to operate RestPOS.</p>
+        <p class="mt-2 max-w-2xl text-sm leading-5 text-gray-500">Assign the access level each team member needs to operate Spicy.</p>
       </div>
       {% if request.user.is_superuser %}
         <a href="{% url 'settings:staff_create' %}" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-500">

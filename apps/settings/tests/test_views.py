@@ -13,7 +13,7 @@ class SettingsViewTestBase(TestCase):
         cls.user = CustomUser.objects.create_user(
             username="admin@test.com", password="testpass123", email="admin@test.com"
         )
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.user.groups.add(mgr)
 
     def setUp(self):
@@ -93,7 +93,7 @@ class TestDashboardView(SettingsViewTestBase):
 
     def test_cashier_cannot_post(self):
         cashier = CustomUser.objects.create_user(username="cashier@test.com", password="testpass123")
-        cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
         cashier.groups.add(cashier_group)
         self.client.login(username="cashier@test.com", password="testpass123")
         response = self.client.post(reverse("settings:restaurant_settings"), self._post_data())
@@ -161,9 +161,9 @@ class TestStaffManagementViews(TestCase):
         cls.newbie = CustomUser.objects.create_user(
             username="newbie@test.com", password="testpass123", email="newbie@test.com"
         )
-        cls.admin_group, _ = Group.objects.get_or_create(name="RestPOS Admin")
-        cls.manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
-        cls.cashier_group, _ = Group.objects.get_or_create(name="RestPOS Cashier")
+        cls.admin_group, _ = Group.objects.get_or_create(name="Spicy Admin")
+        cls.manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
+        cls.cashier_group, _ = Group.objects.get_or_create(name="Spicy Cashier")
         cls.manager_user.groups.add(cls.manager_group)
 
     def setUp(self):
@@ -185,7 +185,7 @@ class TestStaffManagementViews(TestCase):
             reverse("settings:staff_assign_role", kwargs={"pk": self.newbie.pk, "role": "cashier"})
         )
         self.assertRedirects(response, reverse("settings:staff_list"))
-        self.assertTrue(self.newbie.groups.filter(name="RestPOS Cashier").exists())
+        self.assertTrue(self.newbie.groups.filter(name="Spicy Cashier").exists())
 
     def test_assign_admin_role(self):
         response = self.client.post(
@@ -193,7 +193,7 @@ class TestStaffManagementViews(TestCase):
         )
         self.assertRedirects(response, reverse("settings:staff_list"))
         self.newbie.refresh_from_db()
-        self.assertTrue(self.newbie.groups.filter(name="RestPOS Admin").exists())
+        self.assertTrue(self.newbie.groups.filter(name="Spicy Admin").exists())
         self.assertTrue(self.newbie.is_superuser)
         self.assertTrue(self.newbie.is_staff)
 
@@ -201,7 +201,7 @@ class TestStaffManagementViews(TestCase):
         self.cashier.groups.add(self.cashier_group)
         response = self.client.post(reverse("settings:staff_remove_role", kwargs={"pk": self.cashier.pk}))
         self.assertRedirects(response, reverse("settings:staff_list"))
-        self.assertFalse(self.cashier.groups.filter(name="RestPOS Cashier").exists())
+        self.assertFalse(self.cashier.groups.filter(name="Spicy Cashier").exists())
 
     def test_remove_role_htmx_returns_targeted_row(self):
         self.cashier.groups.add(self.cashier_group)
@@ -241,7 +241,7 @@ class TestStaffManagementViews(TestCase):
         self.admin_user.groups.add(self.admin_group)
         response = self.client.post(reverse("settings:staff_remove_role", kwargs={"pk": self.admin_user.pk}))
         self.assertRedirects(response, reverse("settings:staff_list"))
-        self.assertTrue(self.admin_user.groups.filter(name="RestPOS Admin").exists())
+        self.assertTrue(self.admin_user.groups.filter(name="Spicy Admin").exists())
 
     def test_non_superuser_cannot_assign(self):
         self.client.logout()

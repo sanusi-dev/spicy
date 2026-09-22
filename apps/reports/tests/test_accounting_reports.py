@@ -19,7 +19,7 @@ class AccountingReportTest(DailyPnLTestMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         cls._setup_pnl_world()
-        mgr, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
         cls.manager.groups.add(mgr)
         cls.day = date.today()
         cls.fy = cls.accounts["fiscal_year"]

@@ -14,7 +14,7 @@
 
 ### Backoffice path
 
-All backoffice shift pages (`apps/staff/views.py`) are `@backoffice_required`: only superusers, RestPOS Admins, and RestPOS Managers pass; cashiers get 403. The POS open/close routes remain the cashier-facing path.
+All backoffice shift pages (`apps/staff/views.py`) are `@backoffice_required`: only superusers, Spicy Admins, and Spicy Managers pass; cashiers get 403. The POS open/close routes remain the cashier-facing path.
 
 `staff.views.opening_entry_create()` and `_save_opening_entry()` create a draft and bulk-create `OpeningPayment` rows. `opening_entry_detail()` lets a draft be edited by replacing its child rows. `opening_entry_submit()` calls `full_clean()` and then `entry.submit()`.
 

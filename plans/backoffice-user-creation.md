@@ -27,7 +27,7 @@ lock out leavers, without touching Django admin. Role meanings stay exactly as t
   `staff_assign_role` (`views.py:99-129`) into `_apply_role(user, role)` and call it from
   both views. Semantics preserved: admin → `is_superuser=True, is_staff=True` + Admin
   group; manager/cashier → superuser/staff cleared + respective group. Exactly one
-  RestPOS group per user, as today.
+  Spicy group per user, as today.
 - Deactivation replaces nothing: `staff_remove_role` keeps working (strips groups, keeps
   login for profile/history). Toggle covers the "ex-staff must not log in at all" case;
   inactive users vanish from POS login and fail `has_staff_role` implicitly (`is_active`

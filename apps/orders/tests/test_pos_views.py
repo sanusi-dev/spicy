@@ -65,7 +65,7 @@ class POSViewTestBase(OrderAccountingMixin, TestCase):
         ProductionUnit.objects.create(name="Kitchen", warehouse=cls.warehouse, department="FOOD")
         ProductionUnit.objects.create(name="Bar", warehouse=cls.warehouse, department="DRINKS")
         cls.user = CustomUser.objects.create_user(username="cashier", password="testpass123")
-        cashier_group = Group.objects.get(name="RestPOS Cashier")
+        cashier_group = Group.objects.get(name="Spicy Cashier")
         cls.user.groups.add(cashier_group)
 
     def setUp(self):
@@ -257,7 +257,7 @@ class POSShiftCloseTest(POSViewTestBase):
 
     def test_other_cashier_cannot_close_shift(self):
         other = CustomUser.objects.create_user(username="other-cashier", password="testpass123")
-        cashier_group = Group.objects.get(name="RestPOS Cashier")
+        cashier_group = Group.objects.get(name="Spicy Cashier")
         other.groups.add(cashier_group)
         self.client.force_login(other)
 
@@ -269,7 +269,7 @@ class POSShiftCloseTest(POSViewTestBase):
 
     def test_manager_can_open_close_screen_for_another_cashiers_shift(self):
         manager = CustomUser.objects.create_user(username="closing-manager", password="testpass123")
-        manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         manager.groups.add(manager_group)
         self.client.force_login(manager)
 
@@ -471,7 +471,7 @@ class POSOrderHistoryTest(POSViewTestBase):
         self.assertRedirects(response, reverse("pos:pos_order_history_detail", kwargs={"pk": self.return_order.pk}))
 
     def test_managers_open_any_detail_and_reprint_without_setting(self):
-        self.user.groups.add(Group.objects.get(name="RestPOS Manager"))
+        self.user.groups.add(Group.objects.get(name="Spicy Manager"))
 
         response = self.client.get(reverse("pos:pos_order_history_detail", kwargs={"pk": self.cancelled.pk}))
         self.assertContains(response, f"#{self.cancelled.order_number}")
@@ -746,7 +746,7 @@ class POSSyncTest(POSViewTestBase):
         self.assertEqual(self.order.items.count(), 1)
 
     def test_reprint_does_not_create_another_ticket(self):
-        self.user.groups.add(Group.objects.get(name="RestPOS Manager"))
+        self.user.groups.add(Group.objects.get(name="Spicy Manager"))
         self.client.post(reverse("pos:pos_order_sync", kwargs={"pk": self.order.pk}))
         ticket_count = self.order.kots.count()
         response = self.client.post(
@@ -763,7 +763,7 @@ class POSSyncTest(POSViewTestBase):
 
     @patch("apps.orders.views_pos.printing.print_ticket")
     def test_failed_reprint_returns_retry_state(self, print_ticket):
-        self.user.groups.add(Group.objects.get(name="RestPOS Manager"))
+        self.user.groups.add(Group.objects.get(name="Spicy Manager"))
         self.client.post(reverse("pos:pos_order_sync", kwargs={"pk": self.order.pk}))
         print_ticket.return_value = PrintResult(success=False, ticket_type="kitchen")
         response = self.client.post(
@@ -1300,9 +1300,9 @@ class POSDraftOwnershipTest(POSViewTestBase):
         self.client.post(reverse("pos:pos_order_new"), {"order_type": "DINE_IN", "guest_count": "1"})
         self.order = Order.objects.get()
         self.other = CustomUser.objects.create_user(username="other-cashier", password="testpass123")
-        self.other.groups.add(Group.objects.get(name="RestPOS Cashier"))
+        self.other.groups.add(Group.objects.get(name="Spicy Cashier"))
         self.manager = CustomUser.objects.create_user(username="draft-manager", password="testpass123")
-        manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         self.manager.groups.add(manager_group)
         self.detail_url = reverse("pos:pos_order_screen", kwargs={"pk": self.order.pk})
 

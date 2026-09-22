@@ -1,8 +1,8 @@
-# RestPOS — Agent Guidelines
+# Spicy — Agent Guidelines
 
 ## Project Overview
 
-RestPOS is a restaurant POS and management system for a Nigerian restaurant, built with Django + HTMX.
+Spicy is a restaurant POS and management system for a Nigerian restaurant, built with Django + HTMX.
 
 **Client context:**
 - Three thermal printers: cashier receipt, kitchen ticket, bar ticket
@@ -43,7 +43,7 @@ The system runs on the local network only. Django runs on the cashier desktop. A
 ## Workspace Structure
 
 ```text
-RestPOS/
+Spicy/
 ├── AGENTS.md                         ← this file
 ├── PLAN.md                           ← build sequence roadmap + decision-only detailed plans
 ├── FEATURES.md                       ← product feature specification (what the system does)
@@ -68,7 +68,7 @@ RestPOS/
 │   ├── reports/         ← Daily P&L document and P&L settings
 │   └── web/             ← home, backoffice dashboard, middleware, context processors
 │   (planned: printing — deferred: customers, coupons)
-├── restpos/                         ← project package (settings.py, urls.py, celery.py, wsgi.py)
+├── spicy/                            ← project package (settings.py, urls.py, celery.py, wsgi.py)
 └── templates/
     ├── pos/            ← cashier-facing POS screen
     └── backoffice/     ← manager/owner back office
@@ -708,7 +708,7 @@ When a decision requires user input, use the interactive `question` tool — nev
 - Django 6.0 template partials: `{% partialdef %}`/`{% partial %}` inline in the template where used — keeps related markup together. Define partials inline, not in scattered files.
 - `{% include %}` only for fragments genuinely shared across 3+ unrelated templates — put in `components/`. This is the exception, not the default.
 - HTMX responses: use partials with `inline` or direct partial access — one template file serves both the full page and the HTMX fragment. No separate `_partial.html` per endpoint.
-- Tailwind v4 utility classes only. **No DaisyUI in new RestPOS code** (it exists in Pegasus boilerplate but must not be used in POS or back-office templates). No inline `style=""` attributes.
+- Tailwind v4 utility classes only. **No DaisyUI in new Spicy code** (it exists in Pegasus boilerplate but must not be used in POS or back-office templates). No inline `style=""` attributes.
 
 ## JavaScript
 
@@ -779,8 +779,8 @@ One working directory can only have one branch checked out — `git checkout` in
 When multiple agents or harnesses need different branches concurrently (e.g., OpenCode on `feat/pwac` while another harness is on `main`), use `git worktree` instead of switching the shared checkout:
 
 ```bash
-git worktree add ../RestPOS-main main
-git worktree add ../RestPOS-pwac feat/pwac-inventory-costing
+git worktree add ../Spicy-main main
+git worktree add ../Spicy-pwac feat/pwac-inventory-costing
 # each harness points at its own directory; switching in one does not affect the other
 ```
 

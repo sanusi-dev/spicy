@@ -6,9 +6,9 @@ Every backoffice view declares its own role requirement with a decorator from `a
 
 | Decorator | Who passes | Backoffice surfaces |
 |---|---|---|
-| `@backoffice_required` | superuser, RestPOS Admin, or RestPOS Manager | Dashboard, settings reads, staff list, inventory, menu, payments reads, orders register/detail, KOT register, shifts (opening/closing documents) |
-| `@manager_required` | superuser, RestPOS Admin, or RestPOS Manager | Accounting, reports (Daily P&L and query reports), payments writes, order cancel/return/delete, restaurant settings, production unit writes |
-| `@admin_required` | superuser or RestPOS Admin | Staff role assignment/removal |
+| `@backoffice_required` | superuser, Spicy Admin, or Spicy Manager | Dashboard, settings reads, staff list, inventory, menu, payments reads, orders register/detail, KOT register, shifts (opening/closing documents) |
+| `@manager_required` | superuser, Spicy Admin, or Spicy Manager | Accounting, reports (Daily P&L and query reports), payments writes, order cancel/return/delete, restaurant settings, production unit writes |
+| `@admin_required` | superuser or Spicy Admin | Staff role assignment/removal |
 
 Anonymous users redirect to login; authenticated users who fail the role test get `403`. See [Authentication and Authorization](auth.md) for the full table including POS surfaces.
 

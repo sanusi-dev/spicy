@@ -151,7 +151,7 @@ class POSClosingEntryModelTest(POSClosingEntryTestBase):
 
     def test_manager_can_close_another_cashiers_shift(self):
         manager = CustomUser.objects.create_user(username="manager@test.com", password="testpass123")
-        manager_group, _ = Group.objects.get_or_create(name="RestPOS Manager")
+        manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         manager.groups.add(manager_group)
 
         submit_closing_entry(self.closing, actor=manager)

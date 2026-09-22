@@ -116,7 +116,7 @@ class VariantPickerTestBase(OrderAccountingMixin, TestCase):
         ProductionUnit.objects.create(name="Kitchen", warehouse=cls.warehouse, department="FOOD")
         ProductionUnit.objects.create(name="Bar", warehouse=cls.warehouse, department="DRINKS")
         cls.user = CustomUser.objects.create_user(username="cashier", password="testpass123")
-        cls.user.groups.add(Group.objects.get(name="RestPOS Cashier"))
+        cls.user.groups.add(Group.objects.get(name="Spicy Cashier"))
 
     def setUp(self):
         self.client.force_login(self.user)
