@@ -3,6 +3,7 @@
 import urllib.parse
 
 from django import forms
+from django.core.exceptions import FieldDoesNotExist
 from django.db.models import Q
 from django.http import QueryDict
 
@@ -74,7 +75,7 @@ class StyledModelForm(forms.ModelForm):
         """Return the model field matching a form field name, or None."""
         try:
             return self._meta.model._meta.get_field(name)
-        except Exception:
+        except FieldDoesNotExist:
             return None
 
 

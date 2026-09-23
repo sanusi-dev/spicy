@@ -34,6 +34,9 @@ class MessagesMiddleware:
         if not message_list:
             return
 
-        trigger_data = json.loads(response.get("HX-Trigger", "{}"))
+        try:
+            trigger_data = json.loads(response.get("HX-Trigger", "{}"))
+        except json.JSONDecodeError:
+            trigger_data = {}
         trigger_data["showMessages"] = message_list
         response["HX-Trigger"] = json.dumps(trigger_data)

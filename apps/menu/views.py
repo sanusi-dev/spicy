@@ -1,5 +1,3 @@
-from typing import cast
-
 from django.db.models import Count, OuterRef, Subquery
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -170,7 +168,12 @@ def add_on_list(request: HttpRequest) -> HttpResponse:
         "parent_item", "parent_item__item_group", "add_on_item", "add_on_item__item_group"
     ).annotate(active_menu_rate=Subquery(active_price))
     if parent_id:
-        add_ons = add_ons.filter(parent_item_id=cast(int, parent_id))
+        try:
+            parent_pk = int(parent_id)
+        except ValueError:
+            parent_pk = None
+        if parent_pk is not None:
+            add_ons = add_ons.filter(parent_item_id=parent_pk)
     if department:
         add_ons = add_ons.filter(add_on_item__department=department)
     parent_items = Item.objects.filter(add_ons__isnull=False).distinct().order_by("item_name").only("item_name")
@@ -230,7 +233,12 @@ def variant_list(request: HttpRequest) -> HttpResponse:
     parent_id = request.GET.get("parent_item")
     variants = ItemVariant.objects.select_related("parent_item", "variant_item").all()
     if parent_id:
-        variants = variants.filter(parent_item_id=cast(int, parent_id))
+        try:
+            parent_pk = int(parent_id)
+        except ValueError:
+            parent_pk = None
+        if parent_pk is not None:
+            variants = variants.filter(parent_item_id=parent_pk)
     parent_items = Item.objects.filter(pos_variants__isnull=False).distinct().order_by("item_name").only("item_name")
     return render(
         request,
