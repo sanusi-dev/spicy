@@ -30,6 +30,10 @@ The same URL supports normal progressive enhancement: non-HTMX requests receive 
 
 A 3xx redirect's response headers are dropped when the browser follows it, so an `HX-Trigger` toast attached to a redirect is never seen. For HTMX requests that redirect with queued messages (the submit/cancel views), `MessagesMiddleware` instead sets `HX-Redirect`, forcing a full page navigation. The messages persist in Django's message storage and render as toasts via the destination page's `#django-messages` block. Non-HTMX requests keep the plain redirect.
 
+### Global error state
+
+Both shells surface HTMX failures that have no per-action banner. `templates/web/app/app_base.html` reveals `#htmx-error` on `htmx:responseError`; `templates/pos/base.html` reveals its own `#htmx-error` on `htmx:responseError` and `htmx:sendError` (an unreachable server is the common POS failure) and hides it again after the next successful request. Dismissing the banner is manual. Per-action banners in the cart still arrive as 200 responses carrying `error` in the context.
+
 ## Formset Partials
 
 Inventory item add/remove endpoints receive the full form POST, rebuild contiguous management-form indices using `inventory.forms.add_formset_row()` or `remove_formset_row()`, and return a fragment from the same form template. They do not save rows until the parent form is submitted. Item UOM conversions use the same pattern (`inventory:item_uom_add` / `item_uom_remove`). Purchase-receipt lines `hx-get` `inventory:purchase_receipt_item_meta` (replace the UOM widget when the item changes) and `inventory:purchase_receipt_stock_qty_preview` (show e.g. `5 Crate = 120 Bottle`).

@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% block body_wrapper %}
-<div class="h-screen flex flex-col bg-slate-100 overflow-hidden" x-data="{}" @keydown.window="if (($event.ctrlKey || $event.metaKey) && $event.key === 'k') { $event.preventDefault(); $refs.catalogSearch?.focus(); }">
+<div class="h-screen flex flex-col bg-slate-100 overflow-hidden" x-data="{}" @keydown.window="if (($event.ctrlKey || $event.metaKey) && $event.key === 'k') { $event.preventDefault(); $refs.catalogSearch?.focus(); }" hx-on::response-error="document.getElementById('htmx-error').classList.remove('hidden')" hx-on::send-error="document.getElementById('htmx-error').classList.remove('hidden')" hx-on::after-request="if (event.detail.xhr.status > 0 && event.detail.xhr.status < 400) document.getElementById('htmx-error').classList.add('hidden')">
   <header class="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 shadow-sm shrink-0">
     <a href="{% url 'pos:pos_home' %}" hx-get="{% url 'pos:pos_home' %}" hx-target="#pos-main" hx-swap="innerHTML" hx-push-url="true" class="shrink-0 font-extrabold text-slate-900 text-lg tracking-tight">{{ project_meta.NAME }}</a>
     {% include "pos/partials/shell_navigation.html" with nav_location="header" %}
@@ -39,6 +39,10 @@
   {% if messages %}
     <script id="django-messages" type="application/json">[{% for message in messages %}{"message": "{{ message.message|escapejs }}", "level": "{{ message.level_tag }}"}{% if not forloop.last %},{% endif %}{% endfor %}]</script>
   {% endif %}
+  <div id="htmx-error" class="mx-4 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 ring-1 ring-red-600/10 hidden" role="alert">
+    <span>Could not load this screen. Try again, or check the server connection.</span>
+    <button type="button" aria-label="Dismiss error" onclick="this.parentElement.classList.add('hidden')" class="inline-flex items-center rounded-md p-1 text-red-500 hover:bg-red-100">{% hgi_stroke name="cancel-01" size="18" color="currentColor" stroke_width="2" %}</button>
+  </div>
   <div id="pos-main" class="flex-1 overflow-hidden">{% block pos_content %}{% endblock %}</div>
   <footer class="relative z-20 flex shrink-0 items-center justify-center border-t border-slate-200 bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]">
     {% include "pos/partials/shell_navigation.html" with nav_location="footer" %}
