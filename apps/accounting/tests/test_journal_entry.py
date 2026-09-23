@@ -48,6 +48,18 @@ class JournalEntryTestBase(TestCase):
 
 
 class JournalEntrySubmitTest(JournalEntryTestBase):
+    def test_direct_non_draft_create_rejected(self):
+        with self.assertRaisesMessage(ValidationError, "Use submit()"):
+            JournalEntry.objects.create(
+                voucher_type=JournalEntry.JOURNAL, posting_date=date(2026, 5, 1), status=JournalEntry.SUBMITTED
+            )
+
+    def test_direct_cancelled_create_rejected(self):
+        with self.assertRaisesMessage(ValidationError, "Use submit()"):
+            JournalEntry.objects.create(
+                voucher_type=JournalEntry.JOURNAL, posting_date=date(2026, 5, 1), status=JournalEntry.CANCELLED
+            )
+
     def test_balanced_submit_posts_gl(self):
         journal = self._journal()
         self._row(journal, self.cash, debit=Decimal("100"))

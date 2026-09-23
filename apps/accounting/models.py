@@ -298,14 +298,14 @@ class JournalEntry(BaseModel):
         self.difference = self.total_debit - self.total_credit
 
     def save(self, *args, **kwargs):
+        allow_cancel = getattr(self, "_allow_cancel", False)
+        allow_submit = getattr(self, "_allow_submit", False)
         if self.pk:
             previous = (
                 type(self)
                 .objects.only("status", "is_opening", "voucher_type", "posting_date", "amended_from_id")
                 .get(pk=self.pk)
             )
-            allow_cancel = getattr(self, "_allow_cancel", False)
-            allow_submit = getattr(self, "_allow_submit", False)
             if previous.status != self.DRAFT and not allow_cancel:
                 raise ValidationError("Only draft journal entries can be edited.")
             if previous.voucher_type == self.OPENING and self.voucher_type != self.OPENING:
