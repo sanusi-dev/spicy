@@ -67,9 +67,6 @@ if (document.readyState === 'loading') {
   boot();
 }
 
-document.body.addEventListener('htmx:afterSwap', () => {
-  initSearchableSelects(document);
-});
 document.body.addEventListener('htmx:afterSettle', () => {
   initSearchableSelects(document);
 });

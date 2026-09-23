@@ -76,7 +76,13 @@ document.addEventListener(
     if (!(trigger instanceof HTMLElement)) {
       return;
     }
-    if (trigger.hasAttribute('hx-get') || trigger.hasAttribute('hx-post') || trigger.hasAttribute('hx-delete')) {
+    if (
+      trigger.hasAttribute('hx-get') ||
+      trigger.hasAttribute('hx-post') ||
+      trigger.hasAttribute('hx-put') ||
+      trigger.hasAttribute('hx-patch') ||
+      trigger.hasAttribute('hx-delete')
+    ) {
       return;
     }
     if (!confirmMessage(trigger) && !trigger.dataset.confirmTitle) {
