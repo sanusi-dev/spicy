@@ -3,7 +3,6 @@
 from datetime import date
 
 from apps.accounting.models import FiscalYear, LedgerAccount
-from apps.payments.models import PaymentGLMapping
 
 
 def setup_chart_of_accounts(restaurant):
@@ -199,28 +198,3 @@ def setup_chart_of_accounts(restaurant):
         "temporary_opening": temporary_opening,
         "fiscal_year": fiscal_year,
     }
-
-
-def map_payment_modes(accounts, cash_modes, bank_modes):
-    """Point the given payment modes at cash/bank ledger accounts."""
-    for mode in cash_modes:
-        PaymentGLMapping.objects.get_or_create(
-            mode_of_payment=mode,
-            defaults={"default_account": accounts["cash"]},
-        )
-    for mode in bank_modes:
-        PaymentGLMapping.objects.get_or_create(
-            mode_of_payment=mode,
-            defaults={"default_account": accounts["bank"]},
-        )
-
-
-def setup_closing_variance_accounts(restaurant, accounts):
-    """Wire the variance accounts used by shift-close posting tests."""
-    restaurant.cash_shortage_account = accounts["cogs"]
-    restaurant.cash_over_short_account = accounts["round_off"]
-    restaurant.save()
-
-
-def _fiscal_year_for(date):
-    return FiscalYear.get_for(date)

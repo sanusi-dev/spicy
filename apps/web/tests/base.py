@@ -29,14 +29,6 @@ class TestLoginRequiredViewBase(TestViewBase):
         cls.user.groups.add(mgr)
         cls.authenticated_client.login(username="testing@example.com", password="12345")
 
-    def _run_tests(self, url: str):
-        self._assert_login_requred(url)
-        self._assert_logged_in_200(url)
-
-    def _assert_login_requred(self, url):
-        response = self.client.get(url)
-        self.assertRedirects(response, f"/accounts/login/?next={url}")
-
     def _assert_logged_in_200(self, url):
         response = self.authenticated_client.get(url)
         self.assertEqual(response.status_code, 200)
