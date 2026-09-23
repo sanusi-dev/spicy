@@ -1,7 +1,4 @@
-/**
- * Searchable select fields (Tom Select). Re-runs after HTMX swaps so
- * dynamic formset rows work.
- */
+/** Searchable select fields (Tom Select). Re-runs after HTMX swaps so dynamic formset rows work. */
 import TomSelect from 'tom-select';
 import 'tom-select/dist/css/tom-select.css';
 // Theme overrides must load after Tom Select base CSS

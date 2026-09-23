@@ -25,8 +25,7 @@ document.addEventListener('alpine:init', () => {
   }
 
   function afterPaint(callback) {
-    // Two rAFs: first schedules after style/layout, second after that frame
-    // paints — so Alpine enter-start (off-screen) is visible before we open.
+    // Two rAFs so the off-screen enter-start paints before we open.
     requestAnimationFrame(() => {
       requestAnimationFrame(callback);
     });
@@ -48,8 +47,7 @@ document.addEventListener('alpine:init', () => {
           return;
         }
 
-        // Wait until x-cloak is gone and the closed (off-screen) frame paints,
-        // then open so the slide runs on the compositor — not while hidden.
+        // Open after x-cloak clears and the closed frame paints, so the slide runs on the compositor.
         afterPaint(() => {
           this.open = true;
         });
@@ -66,8 +64,7 @@ document.addEventListener('alpine:init', () => {
         const delay = reducedMotion ? 0 : LEAVE_MS;
 
         window.setTimeout(() => {
-          // The parent history row clears its selected state before the drawer
-          // is removed, so the next open starts with a clean ARIA state.
+          // The row clears its selected state first so the next open starts with clean ARIA state.
           this.$dispatch('order-details-closed');
           this.$root.remove();
           document.getElementById(this.returnFocusId)?.focus();

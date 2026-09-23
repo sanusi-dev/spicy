@@ -28,18 +28,15 @@ function handleMessages(messages) {
   messages.forEach((msg) => showMessage(msg.message, msg.level));
 }
 
-// Read Django messages from initial page load.
 const messagesEl = document.getElementById('django-messages');
 if (messagesEl) {
   try {
     handleMessages(JSON.parse(messagesEl.textContent));
   } catch (e) {
-    // A malformed server message must not prevent the rest of the page JS
-    // from initializing.
+    // A malformed message must not block the rest of the page JS.
   }
 }
 
-// Listen for HTMX HX-Trigger events containing serialized messages.
 document.body.addEventListener('showMessages', (e) => {
   handleMessages(Array.isArray(e.detail) ? e.detail : e.detail?.value);
 });
