@@ -10,7 +10,7 @@ from .models import FiscalYear, JournalEntry, JournalEntryAccount, LedgerAccount
 
 
 class AccountingModelForm(StyledModelForm):
-    """Base ModelForm for accounting forms."""
+    pass
 
 
 class LedgerAccountForm(AccountingModelForm):

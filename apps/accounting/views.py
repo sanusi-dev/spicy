@@ -1,4 +1,4 @@
-"""Accounting backoffice views — chart of accounts, journals, GL, fiscal years, payables."""
+"""Accounting backoffice views — chart of accounts, journals, GL, and fiscal years."""
 
 from decimal import Decimal
 
@@ -190,7 +190,7 @@ def journal_entry_update(request: HttpRequest, pk: int) -> HttpResponse:
 
 @manager_required
 def journal_entry_review(request: HttpRequest, pk: int) -> HttpResponse:
-    """Read-only review screen that must precede submitting an opening entry."""
+    """Read-only review screen for opening entries."""
     journal = get_object_or_404(JournalEntry.objects.select_related("amended_from"), pk=pk)
     if journal.voucher_type != JournalEntry.OPENING or journal.status != JournalEntry.DRAFT:
         return redirect("accounting:journal_entry_detail", pk=journal.pk)

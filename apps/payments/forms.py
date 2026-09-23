@@ -1,3 +1,5 @@
+"""Forms for payment modes and GL mappings."""
+
 from apps.accounting.models import LedgerAccount
 from apps.utils.forms import StyledModelForm, active_choices
 
@@ -5,7 +7,7 @@ from .models import ModeOfPayment, PaymentGLMapping
 
 
 class PaymentsModelForm(StyledModelForm):
-    """Base ModelForm for payments forms."""
+    pass
 
 
 class ModeOfPaymentForm(PaymentsModelForm):
@@ -21,8 +23,6 @@ class PaymentGLMappingForm(PaymentsModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Show enabled modes in the dropdown by default, but keep the currently-assigned
-        # (now disabled) one visible when editing.
         self.fields["mode_of_payment"].queryset = active_choices(
             ModeOfPayment, self.instance.mode_of_payment_id, enabled=True
         )

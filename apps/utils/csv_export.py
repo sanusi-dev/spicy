@@ -10,6 +10,8 @@ EXPORT_ROW_CAP = 50000
 
 
 class _Echo:
+    """csv.writer sink that echoes rows back as strings."""
+
     def write(self, value):
         return value
 

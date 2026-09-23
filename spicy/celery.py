@@ -1,3 +1,5 @@
+"""Celery app with autodiscovered tasks."""
+
 import os
 
 from celery import Celery

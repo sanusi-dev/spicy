@@ -16,7 +16,7 @@ from .payables_models import SupplierInvoiceItem
 
 
 def _income_account_for(department):
-    """Resolve the income account: ProductionUnit (by department) → Restaurant default."""
+    """Return the ProductionUnit income account for a department, or None."""
     from apps.settings.models import ProductionUnit
 
     unit = ProductionUnit.objects.filter(department=department).select_related("income_account").first()
@@ -26,7 +26,7 @@ def _income_account_for(department):
 
 
 def _expense_account_for(department):
-    """Resolve the COGS expense account: ProductionUnit (by department) → Restaurant default."""
+    """Return the ProductionUnit expense account for a department, or None."""
     from apps.settings.models import ProductionUnit
 
     unit = ProductionUnit.objects.filter(department=department).select_related("expense_account").first()
@@ -263,42 +263,12 @@ def post_order_gl(order):
     )
 
 
-@transaction.atomic
-def reverse_order_gl(order, posting_date=None):
-    """Post mirror-negated GL entries for a cancelled order or a return.
-
-    Reversals post on the day they occur — corrections never retroactively
-    alter the period of the original posting.
-    """
-    originals = GLEntry.objects.filter(voucher_type="Order", voucher_no=order.invoice_number, is_cancelled=False)
-    if not originals.exists():
-        return
-    for gl in originals:
-        gl.is_cancelled = True
-        gl.save(update_fields=["is_cancelled", "updated_at"])
-    GLEntry.post(
-        posting_date=posting_date or timezone.localdate(),
-        rows=[
-            {
-                "account": gl.account,
-                "debit": gl.credit,
-                "credit": gl.debit,
-                "against": gl.against,
-            }
-            for gl in originals
-        ],
-        voucher_type="Order",
-        voucher_no=order.invoice_number,
-        remarks="Reversal",
-    )
-
-
 def _is_drink_line(line):
     return (line.department or getattr(line.item, "department", None)) == "DRINKS"
 
 
 def _sales_returns_account_for(department):
-    """Resolve the sales returns account: ProductionUnit (by department) → Restaurant default."""
+    """Return the ProductionUnit sales-returns account for a department, or None."""
     from apps.settings.models import ProductionUnit
 
     unit = ProductionUnit.objects.filter(department=department).select_related("sales_returns_account").first()
@@ -426,13 +396,7 @@ def post_refund_gl(return_order):
 
 @transaction.atomic
 def post_cash_variance_gl(closing):
-    """Post a JournalEntry for a closing entry's per-mode short/excess variances.
-
-    Each drawer's difference posts to that mode's own mapped account (cash or
-    bank), netting against the over/short accounts. Fails closed when the
-    account matching an existing variance sign is unconfigured — a variance
-    must never close with its books side silently skipped.
-    """
+    """Post and submit the variance JournalEntry for a closing entry's per-mode differences."""
     from apps.staff.models import POSClosingEntry
 
     if closing.status != POSClosingEntry.SUBMITTED:

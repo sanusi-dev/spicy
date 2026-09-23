@@ -159,6 +159,7 @@ class DailyPnL(BaseModel):
 
     @transaction.atomic
     def cancel(self):
+        """Cancel a submitted P&L."""
         locked = type(self).objects.select_for_update().get(pk=self.pk)
         if locked.status == self.CANCELLED:
             return
@@ -173,6 +174,7 @@ class DailyPnL(BaseModel):
         self.status = locked.status
 
     def amend(self):
+        """Copy this P&L's inputs into a new draft."""
         persisted = type(self).objects.only("status", "business_date").get(pk=self.pk)
         if persisted.status != self.CANCELLED:
             raise ValidationError("Only cancelled Daily P&L documents can be amended.")

@@ -1,3 +1,5 @@
+"""Order, line, payment, KOT, and audit models."""
+
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -276,8 +278,7 @@ class Order(BaseModel):
             )
             seq = OrderSequence.objects.select_for_update().get(pk=sequence.pk)
             if _created:
-                # A fresh counter must continue from existing orders (e.g. a
-                # new database after a restore) instead of starting at 1.
+                # Continue from the max existing number so a restored DB doesn't restart at 1.
                 seq.current_value = (
                     type(self).objects.aggregate(max_number=models.Max("order_number"))["max_number"] or 0
                 )
@@ -319,6 +320,7 @@ class Order(BaseModel):
         return self.created_by_id is None or self.created_by_id == user.pk
 
     def _validate_pos_item(self, item):
+        """Validate that the item is sellable on the POS for its department."""
         if item.disabled or not item.is_sales_item:
             raise ValidationError("That menu item is no longer available.")
         if item.department == "DRINKS":
@@ -351,9 +353,7 @@ class Order(BaseModel):
             self._validate_order_line_availability(line)
 
     def change_guest_count(self, new_count):
-        """Set the guest count. Cannot drop below a guest who still has items — that
-        would leave orphaned rows tagged to a hidden customer slot and skew per-customer
-        analytics. Submits/cancellations stay untouched."""
+        """Set the guest count, refusing to drop below a guest that still has items."""
         self._ensure_editable()
         if new_count < 1 or new_count > 50:
             raise ValidationError("Guest count must be between 1 and 50.")
@@ -427,6 +427,7 @@ class OrderItem(BaseModel):
         return f"{self.item_name}"
 
     def _validate_return_line(self, order):
+        """Validate return-line linkage and the cumulative return cap."""
         if not order.is_return:
             if self.return_against_item_id:
                 raise ValidationError("Only return lines may reference an original order item.")
@@ -474,8 +475,7 @@ class OrderItem(BaseModel):
         if not self.item_name and self.item_id:
             self.item_name = self.item.item_name
         if self.item_id and not self.department:
-            # Snapshot the item's department and stock flag at order time so
-            # later edits to the Item can't rewrite historical lines.
+            # Snapshot so later Item edits can't rewrite historical lines.
             self.department = self.item.department
         if self.item_id and self.stock_item is None:
             self.stock_item = self.item.is_stock_item
@@ -563,8 +563,6 @@ class OrderPayment(BaseModel):
                         raise ValidationError("This electronic payment reference has already been used.")
         order = self.order if self.order_id else None
         if not order or not getattr(order, "_settling", False):
-            # Outside the settlement flow, payments are immutable once the
-            # order leaves draft or a KOT has been created.
             order = Order.objects.only("status", "is_return").get(pk=self.order_id)
             if order.status != DRAFT:
                 raise ValidationError("Payments on submitted or cancelled orders cannot be modified.")

@@ -1,7 +1,6 @@
 import json
 
-# The browser's XHR follows a 3xx and discards its headers, so an HX-Trigger
-# toast attached to a redirect is never seen by HTMX.
+# A followed 3xx drops response headers, so an HX-Trigger toast would be lost.
 _REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 
 
@@ -23,10 +22,7 @@ class MessagesMiddleware:
 
         storage = request._messages
 
-        # A redirected HTMX request would swap the body (destroying the toast)
-        # and the redirect's headers are dropped on follow. Rewrite it as a
-        # 200 with HX-Redirect so HTMX performs a full navigation; the queued
-        # messages persist in the cookie and render on the destination page.
+        # Rewritten to 200 + HX-Redirect so HTMX navigates fully and queued messages survive.
         if response.status_code in _REDIRECT_STATUSES and storage:
             location = response.get("Location")
             if location:
@@ -38,8 +34,6 @@ class MessagesMiddleware:
         if not message_list:
             return
 
-        # Preserve events emitted by the view while adding the message event
-        # consumed by the toast listener.
         trigger_data = json.loads(response.get("HX-Trigger", "{}"))
         trigger_data["showMessages"] = message_list
         response["HX-Trigger"] = json.dumps(trigger_data)

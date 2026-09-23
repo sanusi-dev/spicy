@@ -144,11 +144,7 @@ class FiscalYear(BaseModel):
 
 
 class GLEntry(BaseModel):
-    """One side of a journalised posting — immutable once created.
-
-    Exactly one of debit/credit is non-zero; reversal postings mark the
-    original row ``is_cancelled`` and write mirror rows.
-    """
+    """One side of a journalised posting — immutable once created."""
 
     posting_date = models.DateField()
     account = models.ForeignKey(LedgerAccount, on_delete=models.PROTECT, related_name="gl_entries")
@@ -206,7 +202,6 @@ class GLEntry(BaseModel):
             if previous.is_cancelled and not self.is_cancelled:
                 raise ValidationError("A cancelled GL entry cannot be un-cancelled.")
             if self.is_cancelled != previous.is_cancelled:
-                # Only the reversal flag may be flipped.
                 if kwargs.get("update_fields") is None:
                     kwargs["update_fields"] = ["is_cancelled", "updated_at"]
                 return super().save(*args, **kwargs)
@@ -321,7 +316,7 @@ class JournalEntry(BaseModel):
 
     @transaction.atomic
     def submit(self):
-        """Post the journal to the GL. Atomic; validates balance and rows."""
+        """Post the journal to the GL."""
         if self.status == self.SUBMITTED:
             return
         if self.status != self.DRAFT:

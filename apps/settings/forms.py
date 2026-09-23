@@ -53,7 +53,7 @@ class SettingsModelForm(forms.ModelForm):
 
 
 class RestaurantForm(SettingsModelForm):
-    """The single settings record: identity, menu, stock, POS behaviour, and accounting."""
+    """Edit form for the Restaurant singleton."""
 
     class Meta:
         model = Restaurant
@@ -158,7 +158,7 @@ class ProductionUnitForm(SettingsModelForm):
 
 
 class StaffCreateForm(forms.Form):
-    """Create a login with one role. Passwords are never displayed or stored in plain text."""
+    """Create a login with one role."""
 
     ROLE_CHOICES = [
         ("cashier", "Cashier"),

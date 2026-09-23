@@ -38,6 +38,7 @@ def current_fiscal_year():
 
 
 def fiscal_year_from_request(request, *, fallback=True):
+    """Return the requested fiscal year, falling back to the current one."""
     raw = request.GET.get("fiscal_year")
     if raw:
         try:

@@ -7,12 +7,10 @@ from .models import ItemAddOn, ItemVariant, Menu, MenuItem
 
 
 class MenuModelForm(StyledModelForm):
-    """Base ModelForm for menu forms."""
+    pass
 
 
 class MenuForm(MenuModelForm):
-    """Form for Menu."""
-
     class Meta:
         model = Menu
         fields = ["name", "enabled"]
@@ -30,14 +28,13 @@ class MenuItemForm(MenuModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Model save() fills it from the item when blank.
         self.fields["item_name"].required = False
         self.fields["item_name"].widget = forms.HiddenInput()
         menu_qs = Menu.objects.filter(enabled=True).order_by("name")
         if self.instance and self.instance.menu_id:
             menu_qs = menu_qs | Menu.objects.filter(pk=self.instance.menu_id)
         self.fields["menu"].queryset = menu_qs.distinct().order_by("name")
-        # ERPNext-aligned: sellable, non-template, active only (keep current selection if any).
+        # Sellable, non-template, active items only; keep the current selection.
         qs = Item.objects.filter(is_sales_item=True, has_variants=False, disabled=False).order_by("item_name")
         if self.instance and self.instance.item_id:
             qs = qs | Item.objects.filter(pk=self.instance.item_id)
@@ -55,8 +52,6 @@ class ItemAddOnForm(MenuModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Parent: sellable leaf items that can carry add-ons on the POS.
-        # Add-on: same — only sellable, non-template, active items (must also be on a menu; model.clean).
         sellable = Item.objects.filter(is_sales_item=True, has_variants=False, disabled=False).order_by("item_name")
         parent_qs = sellable
         add_on_qs = sellable

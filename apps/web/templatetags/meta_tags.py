@@ -25,7 +25,6 @@ def get_image_url(project_meta, page_image=None):
     image = page_image or project_meta["IMAGE"]
     if not image or image.startswith(("http://", "https://")):
         return image
-    # local media urls become absolute; anything else is treated as a static path
     if image.startswith(settings.MEDIA_URL):
         return meta.absolute_url(image)
     return meta.absolute_url(static(image))

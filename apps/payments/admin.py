@@ -1,3 +1,5 @@
+"""Django admin registrations for payment models."""
+
 from django.contrib import admin
 
 from .models import ModeOfPayment, PaymentGLMapping

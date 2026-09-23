@@ -35,6 +35,7 @@ def order_datetime(order):
 
 
 def orders_in_window(start, end):
+    """Submitted orders in the date window (DB filter widened by a day, then precise filter)."""
     dates = {start.date(), (end - timedelta(microseconds=1)).date()}
     dates.add(min(dates) - timedelta(days=1))
     orders = list(Order.objects.filter(status=SUBMITTED, posting_date__in=dates))
@@ -62,6 +63,7 @@ def round_off(orders):
 
 
 def drink_cogs(start, end, orders):
+    """Drink COGS total and rows for the window's orders, with wastage relabelling."""
     del start, end
     rows = []
     total = ZERO
@@ -115,8 +117,7 @@ def drink_cogs(start, end, orders):
             qty = abs(line.qty)
             amount = money(qty * rate)
             item_name = line.item_name or line.item.item_name
-            # Reverse the sale's cost, then re-add it as wastage: the bottle stays
-            # costed once, it only changes label.
+            # Reverse the sale's cost, then re-add as wastage — the bottle stays costed once.
             total -= amount
             rows.append(
                 {
@@ -141,6 +142,7 @@ def drink_cogs(start, end, orders):
 
 
 def cash_variance(start, end, include):
+    """Cash variance for the window, sign-flipped from the closings' short/excess."""
     if not include:
         return ZERO
     closings = POSClosingEntry.objects.filter(
@@ -164,6 +166,7 @@ def electricity(pnl, rate):
 
 
 def recurring_amount(expense, business_date, gross_sales):
+    """Recurring cost for the day — daily in full, monthly prorated, percent of sales."""
     if expense.kind in {
         PnLRecurringExpense.DIRECT_DAILY,
         PnLRecurringExpense.INDIRECT_DAILY,

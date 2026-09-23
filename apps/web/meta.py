@@ -3,7 +3,7 @@ from django.contrib.sites.models import Site
 
 
 def get_protocol(is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS) -> str:
-    """Return the default protocol for the server (\'http\' or \'https\')."""
+    """Return 'http' or 'https' for the configured scheme."""
     return f"http{'s' if is_secure else ''}"
 
 

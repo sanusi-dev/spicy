@@ -272,20 +272,19 @@ class Bin(BaseModel):
 
     @property
     def stock_value(self):
-        """Derived stock value (qty × WAC) for template/admin compatibility."""
+        """Derived stock value (qty × WAC)."""
         qty = self.actual_qty or Decimal("0")
         wac = self.valuation_rate or Decimal("0")
         return qty * wac
 
     @classmethod
     def get_or_create_bin(cls, item, warehouse):
-        """Return the existing Bin for item+warehouse, or create a new one."""
         bin_obj, _created = cls.objects.get_or_create(item=item, warehouse=warehouse)
         return bin_obj
 
     @classmethod
     def get_or_create_bin_id(cls, item_id, warehouse_id):
-        """Same as get_or_create_bin but takes ids directly — skips FK instance loads."""
+        """Same as get_or_create_bin but takes ids."""
         bin_obj, _created = cls.objects.get_or_create(item_id=item_id, warehouse_id=warehouse_id)
         return bin_obj
 
@@ -356,11 +355,7 @@ class StockLedgerEntry(BaseModel):
         reversal_of_sle_id=None,
         inbound_value=None,
     ):
-        """Create a ledger entry and update the corresponding Bin.
-
-        ``quantity`` is signed: positive for receipts, negative for issues.
-        ``unit_rate`` is the inbound rate (ignored for outbound where WAC supplies it).
-        """
+        """Create a ledger entry and update the corresponding Bin."""
         if quantity is None:
             raise ValidationError("quantity is required")
         quantity = Decimal(str(quantity))
@@ -636,6 +631,7 @@ class StockEntryDetail(BaseModel):
             raise ValidationError("Source and target warehouses must differ.")
 
     def validate_for_submission(self, *, restaurant, targets):
+        """Validate the line for submit; targets maps department to transfer warehouse."""
         if self.qty <= 0:
             raise ValidationError(f"Quantity for {self.item.item_name} must be greater than zero.")
         if self.item.disabled or not self.item.is_stock_item or self.item.has_variants:
@@ -903,6 +899,7 @@ class PurchaseReceiptItem(BaseModel):
         return super().delete(*args, **kwargs)
 
     def validate_for_submission(self):
+        """Validate the line for submit."""
         if self.received_qty <= 0:
             raise ValidationError(f"Received quantity for {self.item.item_name} must be greater than zero.")
         if self.rate <= 0:

@@ -1,3 +1,5 @@
+"""Order workflows — drafts, lines, settlement, returns, tickets, and drink reservations."""
+
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
@@ -73,11 +75,7 @@ def create_draft_order(shift, user, *, order_type=DINE_IN, guest_count=1):
 
 @transaction.atomic
 def update_order_meta(order, *, order_type=None, guest_delta=None, guest_count=None, actor=None):
-    """Apply order-type or guest-count edits to a locked draft order.
-
-    Returns the effective guest count after clamping, so callers can reset
-    per-order UI state. The printed/sent-ticket guards come from the model.
-    """
+    """Apply order-type or guest-count edits to a draft order; return the effective guest count."""
     if order_type is None and guest_delta is None and guest_count is None:
         return order.guest_count
     order._ensure_editable()
@@ -152,11 +150,7 @@ def update_order_item(order, order_item_pk, *, action="update", qty=None, actor=
 
 @transaction.atomic
 def settle_order(order, payments_data, cashier=None, opening_entry=None):
-    """Process a normal POS payment and submit the order atomically.
-
-    Lines, stock, shift ownership, and payments are validated before the
-    order becomes immutable. Fails closed when the account chain is missing.
-    """
+    """Process a normal POS payment and submit the order atomically."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
         raise ValidationError("Order is already settled or cancelled.")
@@ -209,8 +203,7 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     try:
         for row in payment_rows:
             try:
-                # The savepoint lets us translate a constraint failure
-                # into ValidationError without leaving a broken savepoint.
+                # Savepoint so a constraint failure becomes ValidationError, not a broken transaction.
                 with transaction.atomic():
                     OrderPayment.objects.create(
                         order=locked,
@@ -245,12 +238,7 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
 
 @transaction.atomic
 def cancel_sent_order(order, reason, reason_note="", cancelled_by=None):
-    """Cancel a sent draft order (KOT exists), releasing reservations and tickets.
-
-    Submitted orders are never cancelled — they leave the lifecycle only
-    through the return flow (``make_return`` / ``submit_return``). Payment
-    rows are preserved for audit on the cancelled order.
-    """
+    """Cancel a sent draft order (KOT exists), releasing reservations and tickets."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
         raise ValidationError("Only draft orders can be cancelled.")
@@ -338,13 +326,7 @@ def delete_unsent_draft(order, deleted_by=None):
 
 @contextmanager
 def _transition(order, *, flag):
-    """Allow one guarded lifecycle transition, restoring the guard on exit.
-
-    Order.save() rejects status changes that bypass the document workflows;
-    services set the matching private flag for the duration of their own
-    transition save. The context manager guarantees the flag is removed even
-    when the save raises.
-    """
+    """Set a private lifecycle flag for one guarded save, removing it on exit."""
     setattr(order, flag, True)
     try:
         yield
@@ -460,16 +442,11 @@ def make_return(order):
         raise ValidationError("Cannot return a return order.")
     if not source.is_paid:
         raise ValidationError("Only paid orders can be returned.")
-    # One active return draft at a time; submitted returns are settled, so a
-    # new draft may be created for a further partial refund.
+    # One active return draft at a time.
     if source.return_orders.filter(status=DRAFT).exists():
         raise ValidationError("This order already has an active return.")
 
-    # Mirror every source line as a negative-qty line (same price, same
-    # guest tag) so the return totals are exact negatives of the sale.
-    # The mirrored qty is the *remaining returnable* amount — already
-    # submitted returns reduce it, so a second return draft starts from the
-    # remainder.
+    # Mirrors only the still-returnable remainder — submitted returns reduce it.
     previously_returned = {}
     returned_rows = (
         OrderItem.objects.filter(
@@ -551,8 +528,7 @@ def submit_return(order, actor=None):
     locked.status = SUBMITTED
     with _transition(locked, flag="_allow_submit"):
         locked.save()
-    # Refund GL mirrors the source settle legs for the refunded portion,
-    # inside the same atomic block.
+    # Refund GL mirrors the source settle legs for the refunded portion.
     from apps.accounting.services import post_refund_gl
 
     post_refund_gl(locked)
@@ -615,8 +591,7 @@ def _build_ticket_snapshots(locked, planned_tickets, *, created_by):
     created = []
     for department, order_items, production_unit in planned_tickets:
         ticket_type = _ticket_type_for_department(department)
-        # Same temporary-number dance as cancellation tickets: the final
-        # KOT-*/BOT-* number embeds the new row's pk.
+        # Temp number first — the final KOT-*/BOT-* embeds the pk.
         kot = KOT.objects.create(
             order=locked,
             production_unit=production_unit,
@@ -665,6 +640,7 @@ def dispatch_tickets(tickets):
 
 
 def drink_quantities(order):
+    """Aggregate per-item drink quantities on a draft order ({item_id: qty})."""
     if order.is_return:
         return {}
     rows = (
@@ -728,6 +704,7 @@ def reserve_drink_stock(order, target_quantities):
 
 
 def release_drink_reservations(order):
+    """Release the order's drink reservations."""
     if not _reservations_initialized(order):
         return
     reserve_drink_stock(order, {})
@@ -1007,12 +984,9 @@ def _snapshot_stock_warehouse(order):
 
 
 def _locked_drink_stock(order, *, reservations_initialized):
-    """Lock the order's drink bins and recheck stock availability.
+    """Lock and return the order's drink stock rows for settlement.
 
-    The check subtracts the order's own reservation: qty available for
-    this order = actual_qty - reserved_qty + owned. When the order was
-    created before drink reservations existed, owned is 0 and the full
-    quantity must come from unreserved stock.
+    reservations_initialized: when False, the order predates reservations and draws all qty from unreserved stock.
     """
     drink_items = list(
         order.items.select_related("item")
@@ -1070,7 +1044,6 @@ def _convert_drink_reservations(order, *, reservations_initialized):
             voucher_type="POS Order",
             voucher_no=voucher_no,
             voucher_detail_no=str(oi.pk),
-            prevent_negative=True,
             unit_rate=None,
             posting_date=order.posting_date,
             bin_obj=bins[oi.item_id],
@@ -1157,11 +1130,7 @@ def settle_time_rate(source_order, item):
 
 
 def _restore_stock(order, voucher_type="POS Return"):
-    """Create positive stock ledger entries reversing an order's deductions at the sale's cost.
-
-    Return lines marked ``not_restockable`` skip the restore; their value posts
-    as wastage instead.
-    """
+    """Restore restockable return lines to stock; not_restockable lines post as wastage."""
     voucher_no = str(order.pk)
     stock_items = order.items.select_related("item").filter(
         Q(department="DRINKS") | Q(department__isnull=True, item__department="DRINKS")
@@ -1197,8 +1166,7 @@ def _cancel_kots(order):
     if not active_kots:
         return []
     created = []
-    # One cancellation ticket per production unit so each station gets a
-    # single "all of this is cancelled" sheet rather than one per source KOT.
+    # One cancellation sheet per production unit.
     by_station = {}
     for original_kot in active_kots:
         station = by_station.setdefault(
@@ -1213,9 +1181,7 @@ def _cancel_kots(order):
         production_unit = station["production_unit"]
         original_names = [kot.kot_number for kot in original_kots]
         ticket_type = original_kots[0].ticket_type
-        # Create with a temporary number because the final CNCL-* number
-        # embeds the new row's pk (kot_number is unique, so it can't be
-        # computed before the insert).
+        # Temp number first — the final CNCL-* embeds the pk and kot_number is unique.
         kot = KOT.objects.create(
             order=order,
             production_unit=production_unit,
@@ -1230,8 +1196,7 @@ def _cancel_kots(order):
         kot.kot_number = f"CNCL-{_ticket_prefix_for_type(kot.ticket_type)}-{kot.pk:04d}"
         KOT.objects.filter(pk=kot.pk).update(kot_number=kot.kot_number)
         kot_items = [
-            # Quantities are moved onto cancelled_qty; qty stays 0 so the
-            # cancellation sheet shows what was taken off the order.
+            # qty stays 0 so the cancellation sheet shows what was taken off the order.
             KOTItem(
                 kot=kot,
                 item=ticket_item.item,
@@ -1267,9 +1232,7 @@ def _reservations_initialized(order):
 
 
 def _reservation_warehouse(order, *, required):
-    # Resolve the warehouse through the Restaurant singleton. The order's
-    # snapshot (stock_warehouse) is pinned at first reservation so a later
-    # setting change can't silently re-home a draft's drink stock.
+    # The order's stock_warehouse snapshot is pinned at first reservation.
     from apps.settings.models import Restaurant
 
     restaurant = Restaurant.objects.select_for_update().first()
@@ -1288,9 +1251,7 @@ def _reservation_warehouse(order, *, required):
 
 
 def _locked_drink_bins(item_ids, warehouse):
-    # Bin rows are created on demand for every drink item so the
-    # select_for_update below can lock a stable, complete set of rows
-    # without racing a concurrent first-reservation insert.
+    # Pre-create bins so select_for_update locks a stable row set.
     item_ids = sorted(set(item_ids))
     existing_ids = set(Bin.objects.filter(item_id__in=item_ids, warehouse=warehouse).values_list("item_id", flat=True))
     for item_id in item_ids:

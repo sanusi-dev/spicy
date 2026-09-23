@@ -92,6 +92,7 @@ def recipe_plate_cost(recipe):
 
 
 def _plate_cost(output_qty, rows):
+    """Cost per output portion for (ingredient, qty) rows."""
     kitchen = _kitchen_warehouse()
     total = Decimal("0")
     for line in rows:
@@ -110,7 +111,7 @@ def _plate_cost(output_qty, rows):
 
 
 def compute_food_usage(business_date):
-    """Single source for AvT + Daily P&L: theoretical (recipe × sales) vs actual (kitchen SLEs)."""
+    """Theoretical (recipe × sales) vs actual (kitchen SLEs) ingredient usage for a business date."""
     from apps.orders.models import OrderItem
     from apps.reports.models import PnLConfiguration
     from apps.reports.sources import ZERO, business_day_window, orders_in_window
@@ -260,7 +261,7 @@ def _resolve_account(account, label):
 
 
 def _post_gl_rows(posting_date, voucher_type, voucher_no, rows, remarks):
-    """Merge rows per account and post via GLEntry."""
+    """Merge rows per account and post them."""
 
     from apps.accounting.models import GLEntry
 
@@ -432,8 +433,7 @@ def submit_stock_entry(entry):
                 posting_date=locked.posting_date,
                 bin_obj=locked_bins[(detail.item_id, target.pk)],
             )
-            # GL: move value between the two warehouse SIH accounts at the transfer
-            # rate. Warehouses sharing one account net to zero, so skip the legs.
+            # GL: value moves at the transfer rate; shared warehouse accounts net to zero, so no legs.
             value = money(abs(outgoing.stock_value_change))
             if value:
                 store_account = _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account")
@@ -530,6 +530,7 @@ def cancel_stock_entry(entry):
                 None,
             )
             dest_reversal = StockLedgerEntry._create_entry_locked(
+            # Destination returns at current WAC vs the original transfer value; the drift posts as CANCELLATION_WAC variance.
                 item=detail.item,
                 warehouse=tgt,
                 quantity=-detail.qty,
@@ -555,10 +556,9 @@ def cancel_stock_entry(entry):
                 reversal_of_sle_id=orig_store.pk if orig_store else None,
                 bin_obj=store_bin,
             )
-            # GL: mirror the reversal between the two SIH accounts at the
-            # destination's current WAC. Shared accounts net to zero.
             value = money(abs(dest_reversal.stock_value_change))
             if value and restaurant.store_warehouse.account_id != tgt.account_id:
+            # Drift between current and original value posts to the variance account.
                 reversal_rows.append(
                     {
                         "account": _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account"),
@@ -630,8 +630,7 @@ def cancel_stock_entry(entry):
 
                 mode = ModeOfPayment.objects.get(pk=locked.mode_of_payment_id)
                 funding_acct = _resolve_payment_account(mode)
-                # SIH moves by the bin's current value; the funding leg returns the
-                # value the ledger booked. Any difference (WAC drift) goes to the variance account.
+                # SIH moves at the bin's current value; drift against the booked value goes to the variance account.
                 line_amounts = []
                 for sle in sles:
                     pre_wac = pre_wac_map[sle.pk]
@@ -925,7 +924,7 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
 
 
 def check_receipt_cancel_blocked(receipt):
-    """Return True if receipt has downstream SUBMITTED invoice or allocated payment."""
+    """Return True if a submitted supplier invoice references the receipt."""
     from apps.accounting.models import SupplierInvoice
 
     return SupplierInvoice.objects.filter(status=SupplierInvoice.SUBMITTED, purchase_receipt=receipt).exists()
@@ -1118,6 +1117,7 @@ def cancel_purchase_receipt(receipt):
 
 
 def _revert_last_purchase_rates(receipt):
+    """Restore each item's last_purchase_rate from the prior submitted receipt."""
     lines = list(receipt.items.select_related("item").all())
     if not lines:
         return

@@ -1,4 +1,4 @@
-"""Seed Nigerian restaurant Items and the Main Menu.
+"""Seed Nigerian restaurant items, the Main Menu, and example recipes.
 
 Usage:
     make manage ARGS='seed_menu_catalog'
@@ -87,8 +87,7 @@ SIMPLE_MENU_ITEMS: list[tuple[str, str, str, str, str, bool]] = [
     ("Legend Stout", "Beer", "Bottle", "DRINKS", "900", False),
 ]
 
-# Variant families: parent display name + list of (variant_name, rate)
-# Parent is not stocked; each variant size is a stocked sellable item.
+# Variant families: parent display name + list of (variant_name, rate).
 VARIANT_FAMILIES: list[dict] = [
     {
         "parent": "Grilled Chicken",
@@ -221,7 +220,7 @@ ADD_ON_LINKS: list[tuple[str, str]] = [
     ("Ogbono Soup", "Eba"),
     ("Ogbono Soup", "Pounded Yam"),
     ("Afang Soup", "Pounded Yam"),
-    ("Banga Soup", "Starch"),  # may not exist — will skip if missing
+    ("Banga Soup", "Starch"),  # dead: "Starch" is never created, so this link never seeds.
     ("Pepper Soup (Goat)", "Eba"),
     ("Pepper Soup (Goat)", "Pounded Yam"),
     ("Pepper Soup (Small)", "Eba"),
@@ -467,7 +466,7 @@ class Command(BaseCommand):
         return families
 
     def _seed_menu(self, menu: Menu, simple_items, variant_data, force: bool) -> int:
-        # Remove any template lines left from earlier seeds (ERPNext: templates not sold).
+        # Remove template lines left by earlier seeds.
         MenuItem.objects.filter(menu=menu, item__has_variants=True).delete()
 
         count = 0
@@ -475,7 +474,6 @@ class Command(BaseCommand):
             count += self._upsert_menu_item(menu, item, rate, special, force)
 
         for fam in variant_data:
-            # Variants only on menu (not the template parent).
             for i, (vitem, rate) in enumerate(fam["variants"]):
                 special = fam["special"] and i == 0
                 count += self._upsert_menu_item(menu, vitem, rate, special, force)

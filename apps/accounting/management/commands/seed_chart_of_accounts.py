@@ -1,12 +1,4 @@
-"""Seed the chart of accounts for visual testing and go-live.
-
-Idempotent. Creates the account tree, the current-year fiscal year, and wires
-the Restaurant accounting FKs, warehouse accounts, production-unit income
-accounts, and payment GL mappings.
-
-Usage:
-    make manage ARGS='seed_chart_of_accounts'
-"""
+"""Seed the chart of accounts and wire default accounting links."""
 
 from datetime import date
 
@@ -205,11 +197,8 @@ class Command(BaseCommand):
             )
 
         # Wire production units, warehouses, and the Restaurant singleton.
-        # Bar COGS keeps falling back to the default expense account (Cost of
-        # Goods Sold); only the Kitchen gets a dedicated Food COGS leaf.
         wire_production_unit_accounts()
 
-        # Inventory stock leaves per warehouse (credited at settle-time COGS).
         stock_group = LedgerAccount.objects.get_or_create(
             name="Inventory Stock",
             defaults={
@@ -234,7 +223,6 @@ class Command(BaseCommand):
             warehouse.account = account
             warehouse.save(update_fields=["account", "updated_at"])
 
-        # Supplier payables: a dedicated payable leaf under Liabilities.
         liabilities = LedgerAccount.objects.get_or_create(
             name="Liabilities",
             defaults={
@@ -332,7 +320,6 @@ class Command(BaseCommand):
             if changed:
                 restaurant.save(update_fields=changed + ["updated_at"])
 
-        # Payment GL mappings now reference ledger accounts.
         for mode in ModeOfPayment.objects.all():
             account = cash_account if mode.type == ModeOfPayment.TYPE_CASH else electronic_account
             mapping, created = PaymentGLMapping.objects.get_or_create(

@@ -1,3 +1,5 @@
+"""Shift models — opening entries, closing entries, payments, and cash-outs."""
+
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -249,7 +251,6 @@ class POSClosingEntry(BaseModel):
         """Cancel a closing entry. Blocked if a new Open shift exists."""
         if self.status == self.CANCELLED:
             return
-        # Cancelling an older close would let two live shifts claim the same period.
         new_open_exists = (
             POSOpeningEntry.objects.filter(
                 status=self.SUBMITTED,
@@ -311,7 +312,7 @@ class ClosingPayment(BaseModel):
 
 
 class ShiftCashOut(BaseModel):
-    """Cash leaving the drawer mid-shift for non-stock reasons. No draft state."""
+    """Cash leaving the drawer mid-shift for non-stock reasons."""
 
     SUBMITTED = "SUBMITTED"
     CANCELLED = "CANCELLED"

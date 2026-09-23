@@ -1,3 +1,5 @@
+"""POS-facing forms."""
+
 from django import forms
 
 from .models import CANCEL_REASON_CHOICES

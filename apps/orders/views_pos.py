@@ -82,7 +82,7 @@ def _home_or_redirect(request):
 
 
 def _get_open_shift(lock=False):
-    """Return the open POSOpeningEntry, or None. One open shift exists at most."""
+    """Return the open POSOpeningEntry, or None."""
     queryset = (
         POSOpeningEntry.objects.select_related("cashier")
         .filter(status=POSOpeningEntry.SUBMITTED, closing_entry__isnull=True)
@@ -309,8 +309,7 @@ def _build_order_context(request, order):
             or normalized_query in menu_item.item.item_code.casefold()
         )
     ]
-    # POS availability is unreserved stock, not physical stock: another open
-    # draft must not make the same drink appear sellable a second time.
+    # Availability is unreserved stock, not physical stock.
     services.drink_stock_available(all_menu_items, settings)
     catalog_cards = _build_catalog_cards(all_menu_items, menu_items, catalog_group, catalog_specials, catalog_query)
     tickets = list(order.kots.select_related("production_unit").filter(status=SUBMITTED))
@@ -465,20 +464,14 @@ def pos_open_shift(request: HttpRequest) -> HttpResponse:
 
 
 def _closing_form_prefix(mode_of_payment_id):
-    # Keyed by payment mode, not ClosingPayment pk: the GET preview builds
-    # unsaved rows (pk None), and the POST re-binds the same prefix so the
-    # counted amounts survive a re-render on validation errors.
+    # Keyed by payment mode — GET preview rows are unsaved (pk None).
     return f"cp_mop_{mode_of_payment_id}"
 
 
 @staff_required
 @require_http_methods(["GET", "POST"])
 def pos_close_shift(request: HttpRequest) -> HttpResponse:
-    """Show or submit the active shift's closing reconciliation from the POS.
-
-    GET never creates database rows — it only renders expected amounts for counting.
-    POST creates the draft closing entry (if needed) and submits the reconciliation.
-    """
+    """Show or submit the active shift's closing reconciliation."""
     user = request.user
     open_shift = _get_open_shift()
     if open_shift is None:
@@ -552,7 +545,6 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
                     if _is_htmx(request):
                         return _home_or_redirect(request)
                     return redirect("pos:pos_home")
-            # Invalid forms — fall through to re-render with bound forms.
             display_closing = closing
             display_payments = [payment for payment, _form in form_data]
         cash_out_ctx = _cash_out_context(request, open_shift)
@@ -571,7 +563,6 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
             },
         )
 
-    # GET: render a preview without creating ClosingEntry / ClosingPayment rows.
     existing_draft = POSClosingEntry.objects.filter(
         opening_entry=open_shift,
         status=POSClosingEntry.DRAFT,
@@ -866,12 +857,7 @@ def pos_order_variant_dialog(request: HttpRequest, pk: int, parent_item_id: int)
 @staff_required
 @require_POST
 def pos_order_update_meta(request: HttpRequest, pk: int) -> HttpResponse:
-    """Update order type or guest count on a draft order. Returns the cart partial.
-
-    Accepts either an absolute `guest_count` or a signed `guest_delta` (+1/-1) from the
-    stepper. Lowering is refused (with an error banner) when a higher-numbered guest
-    still has items, so per-customer data isn't silently reassigned.
-    """
+    """Update order type or guest count on a draft order; return the cart partial."""
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
@@ -1080,8 +1066,7 @@ def pos_order_sync(request: HttpRequest, pk: int) -> HttpResponse:
             error=e.messages[0] if e.messages else "Unable to send the order.",
         )
 
-    # Print each ticket individually so one printer failure doesn't block
-    # the other station; failures are surfaced for a manual retry.
+    # Print each ticket individually so one printer failure doesn't block the other station.
     print_failures = services.dispatch_tickets(kots)
 
     if not print_failures:
@@ -1300,11 +1285,7 @@ def pos_order_ticket_print(request: HttpRequest, pk: int, ticket_type: str, acti
 
 @staff_required
 def pos_order_history(request: HttpRequest) -> HttpResponse:
-    """Show cashier-safe historical orders for a selected date.
-
-    Defaults to today's paid sales; cashiers without full-history access
-    are restricted to that view (and payment-method filtering).
-    """
+    """Show cashier-safe historical orders for a selected date."""
     from datetime import date as date_type
 
     user = request.user
@@ -1398,7 +1379,6 @@ def pos_order_history_print(request: HttpRequest, pk: int) -> HttpResponse:
     """Reprint a submitted historical receipt without editing it."""
     orders = Order.objects.filter(status=SUBMITTED)
     if not _full_history_allowed(request.user):
-        # Same visibility as the cashier's history list: paid sales only.
         orders = orders.filter(is_paid=True, is_return=False)
     order = get_object_or_404(orders, pk=pk)
     result = printing.print_receipt(order)

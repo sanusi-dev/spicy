@@ -1,3 +1,5 @@
+"""Backoffice shift views — opening and closing entries, cash-outs."""
+
 import logging
 
 from django.contrib import messages
@@ -48,7 +50,7 @@ def opening_entry_list(request: HttpRequest) -> HttpResponse:
 
 @backoffice_required
 def opening_entry_create(request: HttpRequest) -> HttpResponse:
-    # Explicit request.method test: an empty QueryDict is falsy, so `request.POST or None` would miss a field-less POST.
+    # request.POST is falsy when empty — test the method explicitly.
     user = request.user
     form = OpeningFloatForm(request.POST if request.method == "POST" else None)
     if request.method == "POST" and form.is_valid():
@@ -253,14 +255,7 @@ def closing_entry_create(request: HttpRequest) -> HttpResponse:
 
 @backoffice_required
 def closing_entry_detail(request: HttpRequest, pk: int) -> HttpResponse:
-    """Closing-entry detail page — also handles inline save for DRAFT rows.
-
-    - GET: render the detail page. For DRAFT, the reconciliation table is
-      an inline-editable form (one `closing_amount` input per row, posting
-      back here). For SUBMITTED/CANCELLED, it's read-only.
-    - POST: save the entered closing amounts for DRAFT entries only, then
-      redirect back to this page (PRG pattern).
-    """
+    """Show a closing entry's expected-vs-counted reconciliation."""
     closing = get_object_or_404(
         POSClosingEntry.objects.select_related("cashier", "opening_entry").prefetch_related(
             "opening_entry__cash_outs__mode_of_payment", "opening_entry__cash_outs__recorded_by"

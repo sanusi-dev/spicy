@@ -1,3 +1,5 @@
+"""Payment mode and payment-to-GL mapping models."""
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -63,8 +65,6 @@ class ModeOfPayment(BaseModel):
             if clash:
                 raise ValidationError({"is_default": "Another payment method is already the default."})
         elif self.pk:
-            # Unsetting the only default would leave the POS with no
-            # preselected payment mode, so a replacement must be chosen first.
             was_default = ModeOfPayment.objects.filter(pk=self.pk, is_default=True).exists()
             if was_default and not ModeOfPayment.objects.filter(is_default=True).exclude(pk=self.pk).exists():
                 raise ValidationError(
@@ -72,8 +72,7 @@ class ModeOfPayment(BaseModel):
                 )
 
     def save(self, *args, **kwargs):
-        # Model.save() does not call clean(), so ordinary admin/script saves
-        # must enforce the same invariant as form validation.
+        # save() bypasses clean() — enforce the invariant here too.
         if self.pk and not self.is_default:
             was_default = ModeOfPayment.objects.filter(pk=self.pk, is_default=True).exists()
             if was_default and not ModeOfPayment.objects.filter(is_default=True).exclude(pk=self.pk).exists():

@@ -71,7 +71,7 @@ def _render_field(template_text, form_field, **attrs):
 
 
 def _transform_x_attrs(attrs):
-    """Transform attribute keys prefixed with \'x\' into Alpine.js bindings."""
+    """Transform attribute keys prefixed with 'x' into Alpine.js bindings."""
 
     def _make_x_attr(key):
         if key.startswith("x"):

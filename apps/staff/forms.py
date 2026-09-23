@@ -17,7 +17,6 @@ class StaffModelForm(StyledModelForm):
 class ClosingPaymentForm(StaffModelForm):
     class Meta:
         model = ClosingPayment
-        # Other fields are editable=False: seeded at create, difference computed at submit.
         fields = ["closing_amount"]
         widgets = {
             "closing_amount": forms.NumberInput(
@@ -32,7 +31,6 @@ class ClosingPaymentForm(StaffModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Widget "min" is browser-only; the server rejects negatives itself.
         field = self.fields["closing_amount"]
         field.min_value = Decimal("0")
         field.error_messages["min_value"] = "Counted amounts can't be negative."
@@ -43,7 +41,6 @@ class OpeningFloatForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Snapshot on the instance so the view re-reads modes without a second DB round-trip.
         all_modes = list(ModeOfPayment.objects.filter(enabled=True).order_by("name"))
         # Cash modes first — the primary float renders at the top of the form.
         all_modes.sort(key=lambda m: (0 if m.type == ModeOfPayment.TYPE_CASH else 1, m.name))

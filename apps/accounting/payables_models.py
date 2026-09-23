@@ -278,7 +278,6 @@ class SupplierInvoiceItem(BaseModel):
         if self.rate < 0:
             raise ValidationError("Item rate cannot be negative.")
         if not self.source_receipt_line_id and self.invoice_id and self.invoice.purchase_receipt_id:
-            # Qty/rate come from the receipt so GRNI clears at the exact credited rate.
             raise ValidationError(
                 {"source_receipt_line": "Stock lines on a receipt-linked invoice must link to a receipt line."}
             )
@@ -322,6 +321,7 @@ class SupplierInvoiceItem(BaseModel):
         super().delete(*args, **kwargs)
 
     def validate_for_submission(self):
+        """Repeat the draft validations at submit time."""
         if not self.item_id:
             raise ValidationError("Choose an item for the line.")
         if (
@@ -581,6 +581,7 @@ class SupplierPaymentAllocation(BaseModel):
             raise ValidationError({"invoice": "Allocated invoices must belong to the payment's supplier."})
 
     def validate_for_submission(self):
+        """Repeat the draft validations at submit time."""
         if self.invoice.status != SupplierInvoice.SUBMITTED:
             raise ValidationError("Only submitted supplier invoices can be paid.")
         if self.allocated_amount is None or self.allocated_amount <= 0:

@@ -24,6 +24,7 @@ from .services import compute_daily_pnl
 
 
 def _seed_material_rows(pnl):
+    """Seed qty-0 rows for every active material."""
     existing = set(pnl.material_qtys.values_list("material_id", flat=True))
     for material in PnLMaterial.objects.filter(disabled=False):
         if material.pk not in existing:

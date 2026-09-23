@@ -170,7 +170,7 @@ def submit_closing_entry(closing, actor=None):
         )
 
     submitted_orders = Order.objects.submitted_in_shift(opening, locked.period_start_date, locked.period_end_date)
-    # Returns are excluded: their refunds flow through the deferred refund flow, not drawer sales.
+    # Returns are excluded — their refunds don't touch drawer sales.
     item_totals = (
         OrderItem.objects.filter(order_id=OuterRef("pk")).values("order_id").annotate(total=Sum("qty")).values("total")
     )
@@ -281,7 +281,7 @@ def record_cash_out(opening, *, mode, amount, reason, note="", actor=None):
 
 @transaction.atomic
 def cancel_cash_out(row, *, actor=None):
-    """Cancel a cash-out voucher with a mirrored GL reversal. Manager/admin only."""
+    """Cancel a cash-out voucher with a mirrored GL reversal."""
     is_manager = actor is not None and (actor.is_manager or actor.is_admin or actor.is_superuser)
     if not is_manager:
         raise ValidationError("Only a manager or admin can cancel a cash-out.")

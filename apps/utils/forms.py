@@ -39,9 +39,7 @@ class StyledModelForm(forms.ModelForm):
     def _style_widget(self, field):
         """Apply the appropriate Tailwind class to a field's widget."""
         if isinstance(field, forms.DateField):
-            # The "%Y-%m-%d" format ensures edit-form initial values render
-            # correctly for the picker; it is already Django's default input
-            # format, so parsing is unaffected.
+            # explicit format so edit-form initials render in the date picker
             field.widget = forms.DateInput(
                 attrs={"type": "date", "class": TAILWIND_INPUT_CLASS},
                 format="%Y-%m-%d",
@@ -60,7 +58,7 @@ class StyledModelForm(forms.ModelForm):
                 widget.attrs.setdefault("rows", 3)
 
     def _apply_placeholder(self, name, field):
-        """Add a \"Select ...\" placeholder to choice fields where appropriate."""
+        """Add a 'Select ...' placeholder to choice fields where appropriate."""
         if isinstance(field, forms.ModelChoiceField):
             field.empty_label = f"Select {field.label.lower()}..."
             return

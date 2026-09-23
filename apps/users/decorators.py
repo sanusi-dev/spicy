@@ -5,6 +5,8 @@ from django.core.exceptions import PermissionDenied
 
 
 def _role_required(test_func):
+    """Return a decorator that requires login and passes test_func(user)."""
+
     def decorator(view_func):
         @wraps(view_func)
         @login_required

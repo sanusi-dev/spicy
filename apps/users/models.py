@@ -10,13 +10,11 @@ from apps.users.helpers import validate_profile_picture
 
 
 def _get_avatar_filename(instance, filename):
-    """Generate a random filename to prevent overwrites and cache issues."""
+    """Generate a random profile-picture filename."""
     return f"profile-pictures/{uuid.uuid4()}.{filename.split('.')[-1]}"
 
 
 class CustomUser(AbstractUser):
-    """Custom user model with avatar and role-check properties."""
-
     avatar = models.FileField(upload_to=_get_avatar_filename, blank=True, validators=[validate_profile_picture])
 
     def __str__(self):

@@ -18,10 +18,7 @@ SECRET_KEY = env("SECRET_KEY", default="django-insecure-HjfWKVIxpdgt4NHh8q56GGVT
 DEBUG = env.bool("DEBUG", default=True)
 ENABLE_DEBUG_TOOLBAR = env.bool("ENABLE_DEBUG_TOOLBAR", default=False) and "test" not in sys.argv
 
-# Dev-only escape hatch: superusers skip Django-admin locks (submitted-document
-# locks, hard permission blocks, readonly field lists) while this is on. It is
-# tied to DEBUG so it vanishes automatically when the product goes live. The
-# restriction code itself stays untouched.
+# Dev-only: superusers skip Django-admin locks while DEBUG is on.
 SPICY_DEV_ADMIN_BYPASS = DEBUG
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
@@ -40,7 +37,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
-    "allauth",  # allauth account/registration management
+    "allauth",
     "allauth.account",
     "django_htmx",
     "django_vite",

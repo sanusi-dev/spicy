@@ -1,3 +1,5 @@
+"""Django admin registrations for shift models."""
+
 from django.contrib import admin
 
 from .models import ClosingPayment, OpeningPayment, POSClosingEntry, POSOpeningEntry

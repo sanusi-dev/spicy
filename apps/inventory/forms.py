@@ -25,7 +25,7 @@ from .models import (
 
 
 class InventoryModelForm(StyledModelForm):
-    """Base ModelForm for inventory forms."""
+    pass
 
 
 class UOMForm(InventoryModelForm):
@@ -219,7 +219,6 @@ class StockEntryForm(InventoryModelForm):
         self.fields["mode_of_payment"].label = "Paid from"
         self.fields["mode_of_payment"].help_text = "Funding account for this market purchase."
         self.fields["mode_of_payment"].required = False
-        # Visibility is handled in the template via Alpine x-show on purpose
 
     def clean(self):
         cleaned = super().clean()
@@ -258,7 +257,6 @@ class StockEntryDetailForm(InventoryModelForm):
         item = self._bound_item()
         self.fields["uom"].queryset = _uoms_for_item(item)
         if purpose == "MATERIAL_TRANSFER":
-            # Transfers are always entered in the item's stock unit — offer that only.
             if item:
                 self.fields["uom"].queryset = UOM.objects.filter(pk=item.stock_uom_id)
             self.fields["uom"].widget.attrs["x-bind:disabled"] = "purpose === 'MATERIAL_TRANSFER'"
@@ -365,7 +363,6 @@ class PurchaseReceiptForm(InventoryModelForm):
 
         self.fields["supplier"].queryset = active_choices(Supplier, self.instance.supplier_id, disabled=False)
         self.fields["supplier"].required = False
-        # Required-ness depends on the supplier choice — enforced in clean().
         self.fields["supplier_name"].required = False
 
     def clean(self):

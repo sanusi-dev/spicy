@@ -17,7 +17,7 @@ from .payables_models import (
 
 
 class PayablesModelForm(StyledModelForm):
-    """Base ModelForm for payables forms."""
+    pass
 
 
 class SupplierForm(PayablesModelForm):

@@ -193,6 +193,7 @@ def staff_remove_role(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 def _build_staff_entry(user: CustomUser) -> dict[str, CustomUser | str]:
+    """Derive a user's role for the staff table row entry."""
     user_group_names = {group.name for group in user.groups.all()}
     if user.is_superuser or "Spicy Admin" in user_group_names:
         role = "admin"

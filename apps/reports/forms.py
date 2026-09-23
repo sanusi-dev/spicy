@@ -9,7 +9,7 @@ from .models import DailyPnL, DailyPnLAdHoc, DailyPnLMaterialQty, PnLConfigurati
 
 
 class ReportsModelForm(StyledModelForm):
-    """Base ModelForm for reports forms."""
+    pass
 
 
 class PnLConfigurationForm(ReportsModelForm):

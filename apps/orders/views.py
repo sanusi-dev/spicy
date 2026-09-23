@@ -278,7 +278,7 @@ def kot_detail(request: HttpRequest, pk: int) -> HttpResponse:
 @manager_required
 @require_POST
 def order_return(request: HttpRequest, pk: int) -> HttpResponse:
-    """Create a return draft from a submitted order. Manager only."""
+    """Create a return draft from a submitted order."""
     order = get_object_or_404(Order, pk=pk)
     try:
         return_order = services.make_return(order)
@@ -296,7 +296,7 @@ def order_return(request: HttpRequest, pk: int) -> HttpResponse:
 @manager_required
 @require_POST
 def order_return_submit(request: HttpRequest, pk: int) -> HttpResponse:
-    """Submit a return draft, restoring stock and mirroring refunds. Manager only."""
+    """Submit a return draft, restoring stock and mirroring refunds."""
     order = get_object_or_404(Order, pk=pk)
     try:
         services.submit_return(order, actor=request.user)
@@ -313,7 +313,7 @@ def order_return_submit(request: HttpRequest, pk: int) -> HttpResponse:
 @manager_required
 @require_POST
 def order_return_line_update(request: HttpRequest, pk: int, line_pk: int) -> HttpResponse:
-    """Reduce qty, drop a line, or mark wastage on a return draft. Manager only."""
+    """Reduce qty, drop a line, or mark wastage on a return draft."""
     order = get_object_or_404(Order, pk=pk)
     qty_raw = request.POST.get("qty")
     qty = None

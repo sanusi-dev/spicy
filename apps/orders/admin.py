@@ -1,3 +1,5 @@
+"""Django admin registrations for order models."""
+
 from django.contrib import admin
 
 from apps.utils.admin import dev_admin_bypass
