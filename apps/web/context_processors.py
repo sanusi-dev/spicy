@@ -4,7 +4,7 @@ from django.conf import settings
 
 from apps.inventory.models import ItemGroup
 
-from .meta import absolute_url, get_server_root
+from .meta import absolute_url
 
 
 def project_meta(request):
@@ -12,7 +12,6 @@ def project_meta(request):
     project_data["TITLE"] = "{} | {}".format(project_data["NAME"], project_data["DESCRIPTION"])
     return {
         "project_meta": project_data,
-        "server_url": get_server_root(),
         "page_url": absolute_url(request.path),
         "page_title": "",
         "page_description": "",

@@ -46,7 +46,6 @@ from apps.users.decorators import staff_required
 from . import printing, services
 from .forms import POSOrderCancelForm
 
-SESSION_ORDER_KEY = "pos_order_id"
 SESSION_CARD_KEY = "pos_active_cards"
 CATALOG_FILTER_TARGETS = {"catalog-workspace", "#catalog-workspace"}
 ORDER_DETAILS_DRAWER_TARGETS = {"order-details-drawer", "#order-details-drawer"}
@@ -81,15 +80,13 @@ def _home_or_redirect(request):
     return redirect("pos:pos_home")
 
 
-def _get_open_shift(lock=False):
+def _get_open_shift():
     """Return the open POSOpeningEntry, or None."""
     queryset = (
         POSOpeningEntry.objects.select_related("cashier")
         .filter(status=POSOpeningEntry.SUBMITTED, closing_entry__isnull=True)
         .order_by("period_start_date")
     )
-    if lock:
-        queryset = queryset.select_for_update()
     return queryset.first()
 
 
@@ -423,7 +420,6 @@ def pos_order_new(request: HttpRequest) -> HttpResponse:
     except ValidationError as e:
         messages.error(request, e.messages[0] if e.messages else "Cannot create the order.")
         return _home_or_redirect(request)
-    request.session[SESSION_ORDER_KEY] = order.pk
     cards = request.session.get(SESSION_CARD_KEY, {})
     if not isinstance(cards, dict):
         cards = {}
@@ -739,7 +735,6 @@ def pos_order_screen(request: HttpRequest, pk: int) -> HttpResponse:
         Order.objects.open_drafts_for(shift, request.user).prefetch_related("items__item"),
         pk=pk,
     )
-    request.session[SESSION_ORDER_KEY] = order.pk
     context = _build_order_context(request, order)
     if _is_catalog_filter_request(request):
         return render(request, "pos/index.html#catalog_workspace", context)
@@ -1059,7 +1054,6 @@ def pos_order_sync(request: HttpRequest, pk: int) -> HttpResponse:
             )
             kots = services.create_tickets(order, created_by=request.user)
     except ValidationError as e:
-        order = get_object_or_404(Order.objects.open_drafts_for(shift, request.user), pk=pk)
         return _render_cart(
             request,
             order,
@@ -1137,7 +1131,6 @@ def pos_order_settle(request: HttpRequest, pk: int) -> HttpResponse:
             messages.error(request, str(e.messages[0]) if e.messages else "Settle failed.")
             return redirect("pos:pos_order_screen", pk=order.pk)
 
-        request.session.pop(SESSION_ORDER_KEY, None)
         cards = request.session.get(SESSION_CARD_KEY, {})
         if isinstance(cards, dict):
             cards.pop(str(order.pk), None)
@@ -1189,7 +1182,6 @@ def pos_order_cancel(request: HttpRequest, pk: int) -> HttpResponse:
 
     print_failures = services.dispatch_tickets(cancellation_kots)
 
-    request.session.pop(SESSION_ORDER_KEY, None)
     cards = request.session.get(SESSION_CARD_KEY, {})
     if isinstance(cards, dict):
         cards.pop(str(order.pk), None)
@@ -1223,7 +1215,6 @@ def pos_order_delete(request: HttpRequest, pk: int) -> HttpResponse:
     except ValidationError as e:
         messages.error(request, str(e.messages[0]) if e.messages else "Delete failed.")
         return redirect("pos:pos_order_screen", pk=pk)
-    request.session.pop(SESSION_ORDER_KEY, None)
     cards = request.session.get(SESSION_CARD_KEY, {})
     if isinstance(cards, dict):
         cards.pop(str(order.pk), None)
@@ -1270,7 +1261,6 @@ def pos_order_ticket_print(request: HttpRequest, pk: int, ticket_type: str, acti
             messages.error(request, f"No {ticket_type} ticket is ready for that action.")
             return redirect("pos:pos_order_history_detail", pk=order.pk)
 
-    order = Order.objects.get(pk=pk)
     if services.dispatch_tickets([ticket]):
         feedback = {"ticket_print_error": ticket_type, "ticket_print_action": action}
         if order.status != DRAFT:

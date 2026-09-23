@@ -28,8 +28,3 @@ def get_image_url(project_meta, page_image=None):
     if image.startswith(settings.MEDIA_URL):
         return meta.absolute_url(image)
     return meta.absolute_url(static(image))
-
-
-@register.simple_tag
-def absolute_url(path):
-    return meta.absolute_url(path)

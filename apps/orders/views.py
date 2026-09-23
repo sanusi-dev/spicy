@@ -107,7 +107,7 @@ def order_list(request: HttpRequest) -> HttpResponse:
         orders = orders.filter(posting_date__lte=date_to)
     orders = orders.order_by("-updated_at")
     if request.GET.get("export") == "csv":
-        return _order_list_csv(request, orders, search, status_filter, order_type_filter, date_from, date_to)
+        return _order_list_csv(orders, search, status_filter, order_type_filter, date_from, date_to)
     page_obj = Paginator(orders, 50).get_page(request.GET.get("page") or 1)
 
     return render(
@@ -127,7 +127,7 @@ def order_list(request: HttpRequest) -> HttpResponse:
     )
 
 
-def _order_list_csv(request, orders, search, status_filter, order_type_filter, date_from, date_to):
+def _order_list_csv(orders, search, status_filter, order_type_filter, date_from, date_to):
     """Download the filtered order register as CSV — same rows and order as the page."""
     too_many = over_row_cap(orders)
     if too_many is not None:

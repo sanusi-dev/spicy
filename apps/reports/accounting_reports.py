@@ -34,48 +34,6 @@ def _gl_queryset(*, fiscal_year=None, date_from=None, date_to=None, account_id=N
     return qs
 
 
-def _shift_cash_out_url(voucher_no):
-    from apps.staff.models import ShiftCashOut
-
-    cash_out = ShiftCashOut.objects.filter(pk=int(voucher_no)).only("opening_entry_id").first()
-    if cash_out is None:
-        return None
-    return reverse("staff:opening_entry_detail", args=[cash_out.opening_entry_id])
-
-
-def voucher_url(voucher_type, voucher_no):
-    """Return the backoffice URL for a GL voucher, or None."""
-    if not voucher_type or not voucher_no:
-        return None
-    try:
-        if voucher_type == "Order":
-            order = Order.objects.filter(invoice_number=voucher_no).only("pk").first()
-            return reverse("orders:order_detail", args=[order.pk]) if order else None
-        if voucher_type == "Journal Entry":
-            return reverse("accounting:journal_entry_detail", args=[int(voucher_no)])
-        if voucher_type == "Supplier Invoice":
-            from apps.accounting.payables_models import SupplierInvoice
-
-            invoice = SupplierInvoice.objects.filter(invoice_number=voucher_no).only("pk").first()
-            return reverse("accounting:supplier_invoice_detail", args=[invoice.pk]) if invoice else None
-        if voucher_type == "Supplier Payment":
-            from apps.accounting.payables_models import SupplierPayment
-
-            payment = SupplierPayment.objects.filter(payment_number=voucher_no).only("pk").first()
-            return reverse("accounting:supplier_payment_detail", args=[payment.pk]) if payment else None
-        if voucher_type == "Purchase Receipt":
-            return reverse("inventory:purchase_receipt_detail", args=[int(voucher_no)])
-        if voucher_type == "Stock Entry":
-            return reverse("inventory:stock_entry_detail", args=[int(voucher_no)])
-        if voucher_type == "Stock Reconciliation":
-            return reverse("inventory:reconciliation_detail", args=[int(voucher_no)])
-        if voucher_type == "Shift Cash-Out":
-            return _shift_cash_out_url(voucher_no)
-    except TypeError, ValueError:
-        return None
-    return None
-
-
 def _attach_voucher_urls(rows):
     """Bulk-resolve voucher links for GL rows."""
     by_type = defaultdict(set)

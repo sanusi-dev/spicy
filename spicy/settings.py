@@ -172,7 +172,6 @@ ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
-ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 ACCOUNT_UNIQUE_EMAIL = False
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False
@@ -280,7 +279,6 @@ PROJECT_METADATA = {
     ),
     "IMAGE": "https://upload.wikimedia.org/wikipedia/commons/2/20/PEO-pegasus_black.svg",
     "KEYWORDS": "SaaS, django",
-    "CONTACT_EMAIL": "sanusio293@gmail.com",
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = env.bool("USE_HTTPS_IN_ABSOLUTE_URLS", default=False)

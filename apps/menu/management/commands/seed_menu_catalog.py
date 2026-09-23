@@ -220,7 +220,6 @@ ADD_ON_LINKS: list[tuple[str, str]] = [
     ("Ogbono Soup", "Eba"),
     ("Ogbono Soup", "Pounded Yam"),
     ("Afang Soup", "Pounded Yam"),
-    ("Banga Soup", "Starch"),  # dead: "Starch" is never created, so this link never seeds.
     ("Pepper Soup (Goat)", "Eba"),
     ("Pepper Soup (Goat)", "Pounded Yam"),
     ("Pepper Soup (Small)", "Eba"),
@@ -469,18 +468,17 @@ class Command(BaseCommand):
         # Remove template lines left by earlier seeds.
         MenuItem.objects.filter(menu=menu, item__has_variants=True).delete()
 
-        count = 0
         for item, rate, special in simple_items:
-            count += self._upsert_menu_item(menu, item, rate, special, force)
+            self._upsert_menu_item(menu, item, rate, special, force)
 
         for fam in variant_data:
             for i, (vitem, rate) in enumerate(fam["variants"]):
                 special = fam["special"] and i == 0
-                count += self._upsert_menu_item(menu, vitem, rate, special, force)
+                self._upsert_menu_item(menu, vitem, rate, special, force)
 
         return MenuItem.objects.filter(menu=menu).count()
 
-    def _upsert_menu_item(self, menu: Menu, item: Item, rate: Decimal, special: bool, force: bool) -> int:
+    def _upsert_menu_item(self, menu: Menu, item: Item, rate: Decimal, special: bool, force: bool):
         mi, created = MenuItem.objects.get_or_create(
             menu=menu,
             item=item,
@@ -497,7 +495,6 @@ class Command(BaseCommand):
             mi.item_name = item.item_name
             mi.disabled = False
             mi.save()
-        return 1 if created or force else 0
 
     def _link_variants(self, variant_data, force: bool):
         for fam in variant_data:

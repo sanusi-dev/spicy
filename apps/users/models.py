@@ -1,8 +1,6 @@
 import hashlib
 import uuid
-from functools import cached_property
 
-from allauth.account.models import EmailAddress
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -36,10 +34,6 @@ class CustomUser(AbstractUser):
     def gravatar_id(self) -> str:
         # https://en.gravatar.com/site/implement/hash/
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
-
-    @cached_property
-    def has_verified_email(self):
-        return EmailAddress.objects.filter(user=self, verified=True).exists()
 
     @property
     def is_admin(self):

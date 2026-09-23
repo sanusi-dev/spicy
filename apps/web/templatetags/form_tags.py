@@ -1,13 +1,6 @@
 from django import template
-from django.utils.safestring import mark_safe
 
 register = template.Library()
-
-
-@register.simple_tag
-def render_form_fields(form):
-    rendered_values = [render_field(form[field]) for field in form.fields]
-    return mark_safe("".join(rendered_values))
 
 
 @register.simple_tag

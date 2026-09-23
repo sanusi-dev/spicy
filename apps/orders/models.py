@@ -531,19 +531,13 @@ class OrderPayment(BaseModel):
             raise ValidationError("Payment amount must be a valid decimal.") from exc
         if not amount.is_finite() or amount != money(amount):
             raise ValidationError("Payment amount must be finite and valid to 2 decimal places.")
-        order = self.order if self.order_id else None
-        if order is None:
-            order = Order.objects.only("status", "is_return").get(pk=self.order_id)
+        order = self.order
         if not order.is_return and amount <= 0:
             raise ValidationError("Payment amount must be greater than zero.")
         self.amount = amount
         self.reference_no = (self.reference_no or "").strip()
         if self.mode_of_payment_id:
-            mode = (
-                self.mode_of_payment
-                if hasattr(self, "mode_of_payment")
-                else ModeOfPayment.objects.get(pk=self.mode_of_payment_id)
-            )
+            mode = self.mode_of_payment
             if mode.type != ModeOfPayment.TYPE_CASH:
                 if not self.reference_no and not order.is_return:
                     from apps.settings.models import Restaurant
@@ -561,9 +555,7 @@ class OrderPayment(BaseModel):
                     )
                     if duplicate:
                         raise ValidationError("This electronic payment reference has already been used.")
-        order = self.order if self.order_id else None
-        if not order or not getattr(order, "_settling", False):
-            order = Order.objects.only("status", "is_return").get(pk=self.order_id)
+        if not getattr(order, "_settling", False):
             if order.status != DRAFT:
                 raise ValidationError("Payments on submitted or cancelled orders cannot be modified.")
             if KOT.objects.filter(order=order).exists():

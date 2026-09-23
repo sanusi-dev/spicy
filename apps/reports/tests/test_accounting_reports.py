@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.accounting.models import GLEntry, LedgerAccount
-from apps.reports.accounting_reports import gl_report, simple_pnl, trial_balance, voucher_url
+from apps.reports.accounting_reports import gl_report, simple_pnl, trial_balance
 from apps.settings.models import ProductionUnit
 from apps.staff.models import ShiftCashOut
 
@@ -252,17 +252,6 @@ class AccountingReportTest(DailyPnLTestMixin, TestCase):
             amount=Decimal("200"),
             reason=ShiftCashOut.TRANSPORT,
             recorded_by=self.manager,
-        )
-
-    def test_voucher_url_for_journal_and_shift_cash_out(self):
-        self.assertEqual(
-            voucher_url("Journal Entry", "12"),
-            reverse("accounting:journal_entry_detail", args=[12]),
-        )
-        cash_out = self._shift_cash_out()
-        self.assertEqual(
-            voucher_url("Shift Cash-Out", str(cash_out.pk)),
-            reverse("staff:opening_entry_detail", args=[self.opening.pk]),
         )
 
     def test_gl_rows_link_shift_cash_out(self):

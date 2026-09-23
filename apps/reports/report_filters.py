@@ -37,7 +37,7 @@ def current_fiscal_year():
     return FiscalYear.objects.filter(disabled=False, year_start_date__lte=today, year_end_date__gte=today).first()
 
 
-def fiscal_year_from_request(request, *, fallback=True):
+def fiscal_year_from_request(request):
     """Return the requested fiscal year, falling back to the current one."""
     raw = request.GET.get("fiscal_year")
     if raw:
@@ -45,7 +45,7 @@ def fiscal_year_from_request(request, *, fallback=True):
             return FiscalYear.objects.filter(pk=int(raw)).first()
         except TypeError, ValueError:
             return None
-    return current_fiscal_year() if fallback else None
+    return current_fiscal_year()
 
 
 def fiscal_years():

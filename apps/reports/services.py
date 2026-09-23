@@ -87,7 +87,7 @@ def compute_daily_pnl(pnl):
     gross = money(food + drinks)
     round_off_amount = round_off(orders)
     net = money(gross + round_off_amount)
-    cogs_drinks, cogs_rows = drink_cogs(start, end, orders)
+    cogs_drinks, cogs_rows = drink_cogs(orders)
     usage = compute_food_usage(pnl.business_date)
     food_actual = usage.actual_cost
     cogs = money(food_actual + cogs_drinks)

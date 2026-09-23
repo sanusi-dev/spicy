@@ -77,10 +77,8 @@ def _order_lines_with_accounts(order):
     return result
 
 
-def _income_legs(order, rows):
+def _income_legs(rows):
     """Build income GL rows keyed by resolved income account, merging per account."""
-    from apps.settings.models import Restaurant
-
     settings = Restaurant.load()
     default_income = settings.default_income_account if settings else None
     per_account = {}
@@ -241,7 +239,7 @@ def post_order_gl(order):
     rows = _order_lines_with_accounts(order)
 
     legs = []
-    legs.extend(_income_legs(order, rows))
+    legs.extend(_income_legs(rows))
     legs.extend(_payment_legs(order, settings))
     legs.extend(_rounding_leg(order, settings))
     legs.extend(_cogs_legs(order, rows, settings))

@@ -47,7 +47,7 @@ Most backoffice pages are full HTML responses extending `app_base.html`. HTMX is
 
 ## Asset Build
 
-`vite.config.ts` builds CSS, `site`, `app`, `landing`, and `floor-plan` entries into `static/` with a manifest for django-vite. `site.js` imports HTMX, Alpine, drawer, logout, toast, confirmation, and searchable-select behavior. `app.js` and `floor-plan.js` are built entries, but no active template reference was found for them.
+`vite.config.ts` builds CSS, `site`, `landing`, and `floor-plan` entries into `static/` with a manifest for django-vite. `site.js` imports HTMX, Alpine, drawer, logout, toast, confirmation, and searchable-select behavior. `floor-plan.js` is a built entry, but no active template reference was found for it.
 
 ## Frontend/Backend Authority
 

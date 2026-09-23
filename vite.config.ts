@@ -9,8 +9,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './assets/javascript'),
-      // this may not be needed anymore, but leaving it shouldn't hurt
-      'use-sync-external-store/shim': path.resolve(__dirname, './node_modules/use-sync-external-store/shim'),
     },
   },
   base: '/static/', // Should match Django's STATIC_URL
@@ -23,7 +21,6 @@ export default defineConfig({
         'site-base-css': path.resolve(__dirname, './assets/styles/site-base.css'),
         'site-tailwind-css': path.resolve(__dirname, './assets/styles/site-tailwind.css'),
         'site': path.resolve(__dirname, './assets/javascript/site.js'),
-        'app': path.resolve(__dirname, './assets/javascript/app.js'),
         'landing': path.resolve(__dirname, './assets/javascript/landing.js'),
       },
       output: {

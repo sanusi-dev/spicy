@@ -62,9 +62,8 @@ def round_off(orders):
     return money(sum((o.rounding_adjustment for o in orders), ZERO))
 
 
-def drink_cogs(start, end, orders):
+def drink_cogs(orders):
     """Drink COGS total and rows for the window's orders, with wastage relabelling."""
-    del start, end
     rows = []
     total = ZERO
     sale_orders = {str(o.pk) for o in orders if not o.is_return}

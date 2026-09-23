@@ -178,7 +178,7 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     locked.grand_total = locked.rounded_total
     reservations_initialized = _reservations_initialized(locked)
     _snapshot_stock_warehouse(locked)
-    _validate_drink_stock_for_settlement(locked, reservations_initialized=reservations_initialized)
+    _locked_drink_stock(locked, reservations_initialized=reservations_initialized)
     payment_rows = _validate_payment_data(locked, payments_data, active_shift)
     total_paid = sum((row["amount"] for row in payment_rows), Decimal("0"))
     if total_paid < locked.grand_total:
@@ -739,7 +739,6 @@ def drink_stock_available(menu_items, settings):
             continue
         drink_bin = drink_bins.get(menu_item.item_id)
         available_qty = drink_bin.actual_qty - drink_bin.reserved_qty if drink_bin is not None else Decimal("0")
-        menu_item.available_qty = available_qty
         if available_qty <= 0:
             menu_item.stock_unavailable = True
             menu_item.stock_message = "Out of stock"
@@ -1014,11 +1013,6 @@ def _locked_drink_stock(order, *, reservations_initialized):
             item = next(line.item for line in drink_items if line.item_id == item_id)
             raise ValidationError(f"Insufficient stock for {item.item_name} in {warehouse.name}.")
     return drink_items, bins
-
-
-def _validate_drink_stock_for_settlement(order, *, reservations_initialized):
-    """Lock and recheck all drink stock before creating settlement side effects."""
-    _locked_drink_stock(order, reservations_initialized=reservations_initialized)
 
 
 def _convert_drink_reservations(order, *, reservations_initialized):

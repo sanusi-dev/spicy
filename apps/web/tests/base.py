@@ -3,7 +3,7 @@ from django.test import Client, TestCase, override_settings
 
 from apps.users.models import CustomUser
 
-TEST_STORAGES = STORAGES = {
+TEST_STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
