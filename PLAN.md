@@ -245,8 +245,7 @@ outstanding is 0, `Partly Paid` when 0 < outstanding < total, else `Unpaid`.
 ##### Changes outside a new app
 
 - `settings.Restaurant` gains `default_payable_account`,
-  `default_supplier_expense_account`, `default_stock_in_hand_account`,
-  `stock_received_but_not_billed_account` (GRNI), and
+  `default_supplier_expense_account`, `stock_received_but_not_billed_account` (GRNI), and
   `inventory_price_variance_account` (cancellation WAC drift — see §4.9). The settings
   form has a Payables section.
 - `apps/payments` is untouched — `ModeOfPayment` GL mappings already exist.

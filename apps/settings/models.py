@@ -146,15 +146,6 @@ class Restaurant(BaseModel):
         verbose_name="Default supplier expense account",
         help_text="The expense account used for non-stock costs on supplier invoices.",
     )
-    default_stock_in_hand_account = models.ForeignKey(
-        "accounting.LedgerAccount",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-        verbose_name="Default stock-in-hand account",
-        help_text="The stock account used for supplier invoice items when no category account is set.",
-    )
 
     stock_received_but_not_billed_account = models.ForeignKey(
         "accounting.LedgerAccount",

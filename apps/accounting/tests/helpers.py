@@ -167,7 +167,6 @@ def setup_chart_of_accounts(restaurant):
     restaurant.cash_over_short_account = round_off
     restaurant.default_payable_account = payable
     restaurant.default_supplier_expense_account = supplier_expense
-    restaurant.default_stock_in_hand_account = stock_in_hand
     restaurant.stock_received_but_not_billed_account = grni
     restaurant.inventory_price_variance_account = variance
     restaurant.stock_adjustment_account = stock_adjustment

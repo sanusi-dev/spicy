@@ -234,8 +234,7 @@ class Command(BaseCommand):
             warehouse.account = account
             warehouse.save(update_fields=["account", "updated_at"])
 
-        # Supplier payables: a dedicated payable leaf under Liabilities plus a
-        # stock-in-hand default under the Inventory Stock group.
+        # Supplier payables: a dedicated payable leaf under Liabilities.
         liabilities = LedgerAccount.objects.get_or_create(
             name="Liabilities",
             defaults={
@@ -271,21 +270,6 @@ class Command(BaseCommand):
                 "report_type": LedgerAccount.PROFIT_AND_LOSS,
             },
         )[0]
-        stock_in_hand = LedgerAccount.objects.filter(
-            parent=stock_group,
-            is_group=False,
-            account_type=LedgerAccount.ASSET,
-        ).first()
-        if stock_in_hand is None:
-            stock_in_hand = LedgerAccount.objects.get_or_create(
-                name="Stock in Hand",
-                defaults={
-                    "parent": stock_group,
-                    "is_group": False,
-                    "account_type": LedgerAccount.ASSET,
-                    "report_type": LedgerAccount.BALANCE_SHEET,
-                },
-            )[0]
         supplier_expense_account = LedgerAccount.objects.get_or_create(
             name="Supplier Expenses",
             defaults={
@@ -336,7 +320,6 @@ class Command(BaseCommand):
                 ("cash_over_short_account", round_off),
                 ("default_payable_account", payable_account),
                 ("default_supplier_expense_account", supplier_expense_account),
-                ("default_stock_in_hand_account", stock_in_hand),
                 ("stock_received_but_not_billed_account", grni_account),
                 ("inventory_price_variance_account", variance_account),
                 ("stock_adjustment_account", stock_adjustment_account),
