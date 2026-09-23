@@ -182,7 +182,7 @@ These are queried when `compute_daily_pnl()` runs. A draft's preview will change
 |---|---|---|
 | Food / drinks sales | Submitted `OrderItem.amount` summed by `department`, falling back to the item's department when a line's snapshot is NULL (matching the GL income legs) | Orders whose settlement-stamped `posting_date` + `posting_time` fall in the business-day window |
 | Round-off | Sum of `Order.rounding_adjustment` | Same orders |
-| Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add the SLE's booked value (`abs(stock_value_change)`); restock returns (`POS Return`, qty > 0) subtract it; non-restockable return lines add wastage |
+| Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add the SLE's booked value (`abs(stock_value_change)`); restock returns (`POS Return`, qty > 0) subtract it; non-restockable return lines subtract the sale's cost and re-add it as wastage (net zero) |
 | Food COGS (actual) | Kitchen `CONSUMPTION` + `WASTE_DAMAGE` reconciliation SLEs via `inventory.services.compute_food_usage()` | Rec `posting_date` **equals** the P&L `business_date` (calendar date, not the hour window); `ADJUSTMENT` excluded |
 | Theoretical food cost (memo) | Active recipe × submitted FOOD `OrderItem` qty in the window (returns net; NULL department snapshots fall back to the item's department) | Same rate per ingredient as actual (actual-SLE WAC, else bin WAC, else last rate) |
 | Food cost variance (memo) | Theoretical − actual | Quantity story in qty and naira |
@@ -248,9 +248,9 @@ Food sales never touch this column. `test_food_contributes_zero_cogs` locks that
 Returns:
 
 - Restockable drink return: inventory comes back; Daily P&L **subtracts** `qty × return SLE unit_rate` (the sale's settle-time WAC — the return restores at the same cost the sale removed).
-- Non-restockable ("wastage") drink return: stock is not restored; Daily P&L **adds** a wastage COGS row at the sale's settle-time WAC — the same rate the GL wastage legs post.
+- Non-restockable ("wastage") drink return: stock is not restored; Daily P&L **subtracts** the sale's cost (`RETURN` row) and **adds** the same amount as wastage (`WASTAGE` row) at the sale's settle-time WAC — the same rate the GL refund legs post. The two rows net to zero, so the bottle stays costed once and the wastage stays visible in the breakup.
 
-**Current behavior:** Daily P&L reconstructs drink cost from stock ledger rows of the day's orders. It does not read GL COGS accounts. Accounting reverses the sale's COGS and re-enters the stock at the same settle-time WAC on the GL; that is a separate path.
+**Current behavior:** Daily P&L reconstructs drink cost from stock ledger rows of the day's orders. It does not read GL COGS accounts. Accounting reverses the sale's COGS and records the wastage in its own account at the same settle-time WAC; that is a separate path.
 
 ### Food
 
@@ -508,7 +508,7 @@ The statement partial accepts either live `LineSpec` dataclasses (preview) or sa
 
 - Sale orders → `StockLedgerEntry` `voucher_type="POS Order"`, qty < 0, item department DRINKS → kind `SALE`, amount positive.
 - Return orders → `voucher_type="POS Return"`, qty > 0, drinks → kind `RETURN`, amount negative.
-- Return orders with `not_restockable` drink lines → kind `WASTAGE`, amount positive at `orders.services.settle_time_rate()` (weighted settle-time WAC — one shared rate helper with the GL refund legs).
+- Return orders with `not_restockable` drink lines → kind `RETURN` (amount negative) plus kind `WASTAGE` (amount positive) at `orders.services.settle_time_rate()` (weighted settle-time WAC — one shared rate helper with the GL refund legs). The pair reclassifies the sale's cost and nets to zero.
 
 ### Food usage (`inventory.services.compute_food_usage`)
 

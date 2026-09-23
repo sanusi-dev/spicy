@@ -124,6 +124,12 @@ class SalesAndCogsTest(DailyPnLTestMixin, TestCase):
         self.assertEqual(len(wastage), 1)
         self.assertEqual(wastage[0]["rate"], Decimal("100"))
         self.assertEqual(wastage[0]["amount"], Decimal("100"))
+        # The wastage reclassifies the sale's cost: a matching RETURN row nets it out,
+        # so the two bottles that left the bar cost 100 + 140 once.
+        returns = [row for row in computation.cogs_rows if row["kind"] == "RETURN"]
+        self.assertEqual(len(returns), 1)
+        self.assertEqual(returns[0]["amount"], Decimal("-100"))
+        self.assertEqual(computation.totals["cogs_drinks"], Decimal("240"))
 
     def test_drink_cogs_from_wac(self):
         # Reset WAC to known state — helper leaves 100 @ 0 which would dilute.

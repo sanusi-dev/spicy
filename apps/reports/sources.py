@@ -114,10 +114,23 @@ def drink_cogs(start, end, orders):
             rate = settle_time_rate(order.return_against, line.item)
             qty = abs(line.qty)
             amount = money(qty * rate)
+            item_name = line.item_name or line.item.item_name
+            # Reverse the sale's cost, then re-add it as wastage: the bottle stays
+            # costed once, it only changes label.
+            total -= amount
+            rows.append(
+                {
+                    "item_name": item_name,
+                    "qty": qty,
+                    "rate": rate,
+                    "amount": -amount,
+                    "kind": DailyPnLCogsRow.RETURN,
+                }
+            )
             total += amount
             rows.append(
                 {
-                    "item_name": line.item_name or line.item.item_name,
+                    "item_name": item_name,
                     "qty": qty,
                     "rate": rate,
                     "amount": amount,

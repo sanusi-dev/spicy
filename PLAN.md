@@ -597,7 +597,8 @@ inputs into a new draft; cancel does not post GL.
 `POSClosingEntry.period_end_date`.
 
 **Computation:** submit snapshots settings and live sources; does not post `GLEntry`. Drink
-COGS from settle-time drink SLEs at current WAC (`unit_rate`); food never in COGS; kitchen
+COGS from settle-time drink SLEs at their booked value; wastage returns reverse the sale's cost
+and re-add it as wastage at the same settle-time WAC (net zero); food never in COGS; kitchen
 consumption (reconciliation at current WAC) is memo only. Employee templates or a per-day
 override. Electricity optional (blank = ₦0).
 
