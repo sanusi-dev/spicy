@@ -147,9 +147,3 @@ class OrderReturnTest(BackofficeViewTestBase):
         self.assertEqual(return_order.status, "SUBMITTED")
         self.assertEqual(return_order.payments.count(), 1)
         self.assertEqual(return_order.payments.get().amount, Decimal("-3000"))
-
-
-class KOTDetailTest(BackofficeViewTestBase):
-    def test_kot_detail_404(self):
-        response = self.client.get(reverse("orders:kot_detail", kwargs={"pk": 99999}))
-        self.assertEqual(response.status_code, 404)

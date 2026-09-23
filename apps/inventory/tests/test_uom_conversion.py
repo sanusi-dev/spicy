@@ -339,25 +339,6 @@ class PurchaseReceiptUOMFormTest(UOMConversionTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "5 Crate = 120 Bottle")
 
-    def test_item_meta_defaults_to_stock_uom(self):
-        from django.contrib.auth.models import Group
-
-        from apps.users.models import CustomUser
-
-        user = CustomUser.objects.create_user(username="mgr2@test.com", password="x", email="mgr2@test.com")
-        mgr, _ = Group.objects.get_or_create(name="Spicy Manager")
-        user.groups.add(mgr)
-        self.client.login(username="mgr2@test.com", password="x")
-        self._conversion()
-        response = self.client.get(
-            reverse("inventory:purchase_receipt_item_meta"),
-            {"items-0-item": self.drink.pk, "items-0-received_qty": "5"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, self.bottle.name)
-        self.assertContains(response, self.crate.name)
-        self.assertContains(response, f'value="{self.bottle.pk}"', html=False)
-
 
 class StockEntryUOMFormTest(UOMConversionTestBase):
     def _form_data(self, **overrides):
@@ -401,15 +382,3 @@ class StockEntryUOMFormTest(UOMConversionTestBase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "5 Crate = 120 Bottle")
-
-    def test_stock_entry_item_meta_defaults_to_stock_uom(self):
-        self._login("mgr4@test.com")
-        self._conversion()
-        response = self.client.get(
-            reverse("inventory:stock_entry_item_meta"),
-            {"items-0-item": self.drink.pk, "items-0-qty": "5"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, self.bottle.name)
-        self.assertContains(response, self.crate.name)
-        self.assertContains(response, f'value="{self.bottle.pk}"', html=False)

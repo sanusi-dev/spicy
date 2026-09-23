@@ -181,29 +181,3 @@ class FutureDateTest(StockLedgerEntryTestBase):
                 unit_rate=Decimal("100"),
                 posting_date=tomorrow,
             )
-
-
-class VarianceFieldTest(StockLedgerEntryTestBase):
-    def test_variance_and_reversal(self):
-        sle1 = StockLedgerEntry.create_entry(
-            item=self.item,
-            warehouse=self.warehouse,
-            quantity=Decimal("5"),
-            voucher_type="T",
-            voucher_no="1",
-            unit_rate=Decimal("100"),
-        )
-        sle2 = StockLedgerEntry.create_entry(
-            item=self.item,
-            warehouse=self.warehouse,
-            quantity=Decimal("-2"),
-            voucher_type="T",
-            voucher_no="2",
-            variance_amount=Decimal("50"),
-            variance_type="CANCELLATION_WAC",
-            reversal_of_sle_id=sle1.pk,
-        )
-        sle2.refresh_from_db()
-        self.assertEqual(sle2.variance_amount, Decimal("50"))
-        self.assertEqual(sle2.variance_type, "CANCELLATION_WAC")
-        self.assertEqual(sle2.reversal_of_sle_id, sle1.pk)

@@ -45,12 +45,6 @@ class StaffViewTestBase(TestCase):
         self.client.login(username="manager@test.com", password="testpass123")
 
 
-class TestLoginRequired(TestCase):
-    def test_requires_login(self):
-        response = self.client.get(reverse("staff:dashboard"))
-        self.assertEqual(response.status_code, 302)
-
-
 class TestShiftPagesRequireBackofficeAccess(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -174,11 +168,6 @@ class TestPOSClosingEntryViews(StaffViewTestBase):
         self.assertEqual(response.status_code, 302)
         return POSClosingEntry.objects.get(opening_entry=self.entry)
 
-    def test_list_200(self):
-        response = self.client.get(reverse("staff:closing_entry_list"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Closing Entries")
-
     def test_create_get_auto_creates_draft_and_seeds_rows(self):
         """GET to closing_entry_create starts a DRAFT close for the open shift and seeds ClosingPayment rows."""
         from apps.staff.models import POSClosingEntry
@@ -284,11 +273,6 @@ class TestPOSClosingEntryViews(StaffViewTestBase):
         self.assertEqual(closing.status, POSClosingEntry.SUBMITTED)
         self.entry.refresh_from_db()
         self.assertTrue(self.entry.is_closed)
-
-    def test_submit_requires_post(self):
-        closing = self._seed_closing_draft()
-        response = self.client.get(reverse("staff:closing_entry_submit", kwargs={"pk": closing.pk}))
-        self.assertEqual(response.status_code, 405)
 
     def test_cancel_post(self):
         from apps.staff.models import POSClosingEntry

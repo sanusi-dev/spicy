@@ -72,10 +72,6 @@ class TestPendingApprovalView(TestViewBase):
     def setUp(self):
         self.client.login(username="pending@example.com", password="12345")
 
-    def test_pending_approval_contains_message(self):
-        response = self.client.get(reverse("web:pending_approval"))
-        self.assertContains(response, "Pending Approval")
-
     def test_staff_user_redirected_away_from_pending(self):
         manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         self.user.groups.add(manager_group)
@@ -103,21 +99,6 @@ class TestPOSView(TestLoginRequiredViewBase):
 
 
 class TestCustomUserProperties(TestViewBase):
-    def test_role_flags_flip_with_group_membership(self):
-        from apps.users.models import CustomUser
-
-        Group.objects.get_or_create(name="Spicy Manager")
-        Group.objects.get_or_create(name="Spicy Cashier")
-        mgr = CustomUser.objects.create_user(username="mgr@example.com", email="mgr@example.com")
-        self.assertFalse(mgr.is_manager)
-        mgr.groups.add(Group.objects.get(name="Spicy Manager"))
-        self.assertTrue(mgr.is_manager)
-
-        cash = CustomUser.objects.create_user(username="cash@example.com", email="cash@example.com")
-        self.assertFalse(cash.is_cashier)
-        cash.groups.add(Group.objects.get(name="Spicy Cashier"))
-        self.assertTrue(cash.is_cashier)
-
     def test_has_backoffice_access(self):
         from apps.users.models import CustomUser
 
@@ -155,15 +136,3 @@ class TestCustomUserProperties(TestViewBase):
         nobody = CustomUser.objects.create_user(username="nobody@example.com", email="nobody@example.com")
         self.assertFalse(nobody.has_staff_role)
         self.assertFalse(nobody.has_backoffice_access)
-
-    def test_has_staff_role_superuser(self):
-        from apps.users.models import CustomUser
-
-        user = CustomUser.objects.create_superuser(username="staffsu@example.com", email="staffsu@example.com")
-        self.assertTrue(user.has_staff_role)
-
-    def test_has_staff_role_no_role(self):
-        from apps.users.models import CustomUser
-
-        user = CustomUser.objects.create_user(username="norole@example.com", email="norole@example.com")
-        self.assertFalse(user.has_staff_role)

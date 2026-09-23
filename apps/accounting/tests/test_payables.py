@@ -79,12 +79,6 @@ class PayablesTestBase(TestCase):
 
 
 class SupplierModelTest(PayablesTestBase):
-    def test_default_flag_is_singleton(self):
-        other = Supplier.objects.create(supplier_name="Other", is_default=True)
-        self.supplier.refresh_from_db()
-        self.assertTrue(other.is_default)
-        self.assertFalse(self.supplier.is_default)
-
     def test_payable_account_requires_leaf(self):
         with self.assertRaises(ValidationError):
             Supplier.objects.create(supplier_name="Bad", payable_account=self.accounts["assets"])

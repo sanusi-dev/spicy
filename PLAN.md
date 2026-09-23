@@ -479,7 +479,7 @@ payment GL mappings only when those FKs are currently null.
   rounding, COGS; cancel reversal; missing account config raises; fiscal year guard raises.
   (Return-order GL is covered by §4.3 tests.)
 - `test_payment_gl_mapping.py` — FK + leaf-only validation.
-- `test_views.py` — backoffice gate and CRUD flows.
+- `test_views.py` — backoffice gate, journal submit/opening review flows, HTMX add-row partial.
 - Existing orders/staff suites gain a shared accounting setup helper because settlement now
   requires the account chain.
 

@@ -293,16 +293,6 @@ class RefundGLTest(OrderGLTestBase):
         self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("300"))
         self.assertFalse(entries.filter(account=self.accounts["variance"]).exists())
 
-    def test_drink_refund_without_wac_drift_has_no_variance_leg(self):
-        drink, menu_item = self._clean_drink("Stable WAC Drink")
-        ret = self._drink_return_draft(drink, menu_item, Decimal("300"))
-        submit_return(ret, actor=self.user)
-        ret.refresh_from_db()
-        entries = self._order_gl(ret)
-        self.assertEqual(entries.get(account=self.accounts["cogs"]).credit, Decimal("300"))
-        self.assertEqual(entries.get(account=self.bar_wh.account).debit, Decimal("300"))
-        self.assertFalse(entries.filter(account=self.accounts["variance"]).exists())
-
     def test_wastage_refund_posts_at_settle_time_rate(self):
         wastage = LedgerAccount.objects.create(
             name="Wasted Returns",

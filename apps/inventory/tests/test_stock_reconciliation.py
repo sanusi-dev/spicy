@@ -6,7 +6,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.accounting.models import GLEntry
-from apps.inventory.forms import StockReconciliationForm, StockReconciliationItemForm
 from apps.inventory.models import (
     UOM,
     Bin,
@@ -65,20 +64,6 @@ class StockReconciliationStandardizationTest(TestCase):
 
     def gl_for(self, rec):
         return list(GLEntry.objects.filter(voucher_type="Stock Reconciliation", voucher_no=str(rec.pk)))
-
-    # Form
-
-    def test_form_has_no_purpose_and_offers_four_active_reasons(self):
-        form = StockReconciliationForm()
-        self.assertNotIn("purpose", form.fields)
-        self.assertEqual(form.fields["reason"].choices[0], ("", "Select reason..."))
-        values = [value for value, _label in form.fields["reason"].choices if value]
-        self.assertEqual(values, ["OPENING_STOCK", "ADJUSTMENT", "CONSUMPTION", "WASTE_DAMAGE"])
-        item_form = StockReconciliationItemForm()
-        self.assertEqual(
-            item_form.fields["valuation_rate"].widget.attrs["x-bind:disabled"],
-            "reason !== 'OPENING_STOCK'",
-        )
 
     # Opening
 

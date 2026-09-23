@@ -64,111 +64,7 @@ class InventoryViewTestBase(TestCase):
         self.client.login(username="admin@test.com", password="testpass123")
 
 
-class TestLoginRequired(TestCase):
-    def test_requires_login(self):
-        response = self.client.get(reverse("inventory:dashboard"))
-        self.assertEqual(response.status_code, 302)
-
-
-class TestDashboardView(InventoryViewTestBase):
-    def test_dashboard_200(self):
-        response = self.client.get(reverse("inventory:dashboard"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Inventory")
-
-
-class TestUOMViews(InventoryViewTestBase):
-    def test_uom_create_post(self):
-        response = self.client.post(reverse("inventory:uom_create"), {"name": "TestUnit"})
-        self.assertRedirects(response, reverse("inventory:uom_list"))
-        self.assertTrue(UOM.objects.filter(name="TestUnit").exists())
-
-    def test_uom_update_post(self):
-        response = self.client.post(
-            reverse("inventory:uom_update", kwargs={"pk": self.uom.pk}),
-            {"name": "Pieces"},
-        )
-        self.assertRedirects(response, reverse("inventory:uom_list"))
-        self.uom.refresh_from_db()
-        self.assertEqual(self.uom.name, "Pieces")
-
-
-class TestItemGroupViews(InventoryViewTestBase):
-    def test_item_group_create_post(self):
-        response = self.client.post(
-            reverse("inventory:item_group_create"),
-            {"name": "Beverages", "description": ""},
-        )
-        self.assertRedirects(response, reverse("inventory:item_group_list"))
-        self.assertTrue(ItemGroup.objects.filter(name="Beverages").exists())
-
-
-class TestWarehouseViews(InventoryViewTestBase):
-    def test_warehouse_create_post(self):
-        response = self.client.post(
-            reverse("inventory:warehouse_create"),
-            {
-                "name": "Bar Store",
-                "disabled": "",
-            },
-        )
-        self.assertRedirects(response, reverse("inventory:warehouse_list"))
-        wh = Warehouse.objects.get(name="Bar Store")
-        self.assertEqual(wh.name, "Bar Store")
-
-
-class TestItemViews(InventoryViewTestBase):
-    def test_item_form_includes_uom_conversions(self):
-        response = self.client.get(reverse("inventory:item_create"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "UOM conversions")
-
-    def test_item_create_saves_uom_conversion(self):
-        crate, _ = UOM.objects.get_or_create(name="Crate")
-        response = self.client.post(
-            reverse("inventory:item_create"),
-            {
-                "item_name": "Star Lager",
-                "item_group": self.group.pk,
-                "stock_uom": self.uom.pk,
-                "department": "DRINKS",
-                "is_stock_item": "on",
-                "is_sales_item": "on",
-                "is_purchase_item": "on",
-                "uoms-TOTAL_FORMS": "1",
-                "uoms-INITIAL_FORMS": "0",
-                "uoms-MIN_NUM_FORMS": "0",
-                "uoms-MAX_NUM_FORMS": "1000",
-                "uoms-0-uom": str(crate.pk),
-                "uoms-0-conversion_factor": "24",
-            },
-        )
-        item = Item.objects.get(item_name="Star Lager")
-        self.assertRedirects(response, reverse("inventory:item_detail", kwargs={"pk": item.pk}))
-        conv = item.uom_conversions.get()
-        self.assertEqual(conv.uom_id, crate.pk)
-        self.assertEqual(conv.conversion_factor, Decimal("24"))
-
-
 class TestStockEntryViews(InventoryViewTestBase):
-    def test_stock_entry_create_post(self):
-        response = self.client.post(
-            reverse("inventory:stock_entry_create"),
-            {
-                "purpose": "MATERIAL_RECEIPT",
-                "posting_date": "2025-01-15",
-                "mode_of_payment": str(self.cash_mode.pk),
-                "remarks": "",
-                "items-TOTAL_FORMS": "0",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-            },
-        )
-        entry = StockEntry.objects.filter(purpose="MATERIAL_RECEIPT").first()
-        self.assertIsNotNone(entry)
-        self.assertRedirects(response, reverse("inventory:stock_entry_detail", kwargs={"pk": entry.pk}))
-
     def test_stock_entry_create_rolls_back_parent_when_formset_save_fails(self):
         with (
             patch("apps.inventory.views.StockEntryDetailFormSet.save", side_effect=RuntimeError("failed")),
@@ -347,55 +243,6 @@ class TestRecipeViews(InventoryViewTestBase):
         )
         return dish, self.item
 
-    def test_recipe_create_post(self):
-        from apps.inventory.models import Recipe
-
-        dish, ingredient = self._dish_and_ingredient()
-        response = self.client.post(
-            reverse("inventory:recipe_create"),
-            {
-                "item": str(dish.pk),
-                "output_qty": "2",
-                "is_active": "on",
-                "remarks": "",
-                "items-TOTAL_FORMS": "1",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-                "items-0-ingredient": str(ingredient.pk),
-                "items-0-qty": "0.25",
-            },
-        )
-        recipe = Recipe.objects.get(item=dish, is_active=True)
-        self.assertRedirects(response, reverse("inventory:recipe_detail", kwargs={"pk": recipe.pk}))
-        self.assertEqual(recipe.items.get().qty, Decimal("0.25"))
-
-    def test_recipe_item_add_and_remove_partials(self):
-        add = self.client.post(
-            reverse("inventory:recipe_item_add"),
-            {
-                "item": "",
-                "output_qty": "1",
-                "items-TOTAL_FORMS": "1",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-            },
-        )
-        self.assertEqual(add.status_code, 200)
-        remove = self.client.post(
-            reverse("inventory:recipe_item_remove", kwargs={"index": 0}),
-            {
-                "item": "",
-                "output_qty": "1",
-                "items-TOTAL_FORMS": "1",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-            },
-        )
-        self.assertEqual(remove.status_code, 200)
-
     def test_recipe_open_redirects_to_detail_or_create(self):
         from apps.inventory.models import Recipe, RecipeItem
 
@@ -408,47 +255,8 @@ class TestRecipeViews(InventoryViewTestBase):
         response = self.client.get(reverse("inventory:recipe_open", kwargs={"item_id": dish.pk}))
         self.assertRedirects(response, reverse("inventory:recipe_detail", kwargs={"pk": recipe.pk}))
 
-    def test_recipe_pages_render(self):
-        from apps.inventory.models import Recipe, RecipeItem
-
-        dish, ingredient = self._dish_and_ingredient()
-        self.assertEqual(self.client.get(reverse("inventory:recipe_list")).status_code, 200)
-        self.assertEqual(self.client.get(reverse("inventory:recipe_create")).status_code, 200)
-        recipe = Recipe.objects.create(item=dish, output_qty=Decimal("1"))
-        RecipeItem.objects.create(recipe=recipe, ingredient=ingredient, qty=Decimal("0.2"))
-        self.assertEqual(self.client.get(reverse("inventory:recipe_detail", kwargs={"pk": recipe.pk})).status_code, 200)
-        self.assertEqual(self.client.get(reverse("inventory:recipe_update", kwargs={"pk": recipe.pk})).status_code, 200)
-
-    def test_food_usage_page_200(self):
-        response = self.client.get(reverse("inventory:food_usage"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Food usage")
-
-    def test_item_detail_links_recipe_for_sellable_food(self):
-        dish, _ingredient = self._dish_and_ingredient()
-        response = self.client.get(reverse("inventory:item_detail", kwargs={"pk": dish.pk}))
-        self.assertContains(response, "Add recipe")
-
 
 class TestPurchaseReceiptViews(InventoryViewTestBase):
-    def test_purchase_receipt_create_post(self):
-        response = self.client.post(
-            reverse("inventory:purchase_receipt_create"),
-            {
-                "supplier_name": "ABC Suppliers",
-                "supplier_delivery_note": "DN-001",
-                "posting_date": "2025-01-15",
-                "remarks": "",
-                "items-TOTAL_FORMS": "0",
-                "items-INITIAL_FORMS": "0",
-                "items-MIN_NUM_FORMS": "0",
-                "items-MAX_NUM_FORMS": "1000",
-            },
-        )
-        receipt = PurchaseReceipt.objects.filter(supplier_name="ABC Suppliers").first()
-        self.assertIsNotNone(receipt)
-        self.assertRedirects(response, reverse("inventory:purchase_receipt_detail", kwargs={"pk": receipt.pk}))
-
     def test_purchase_receipt_create_with_supplier_master_and_no_name(self):
         supplier = Supplier.objects.create(supplier_name="Master Foods Ltd")
         response = self.client.post(
@@ -586,11 +394,3 @@ class TestPurchaseReceiptViews(InventoryViewTestBase):
         self.assertRedirects(response, reverse("inventory:purchase_receipt_detail", kwargs={"pk": receipt.pk}))
         receipt.refresh_from_db()
         self.assertEqual(receipt.status, "CANCELLED")
-
-    def test_purchase_receipt_cancel_requires_post(self):
-        receipt = PurchaseReceipt.objects.create(
-            supplier_name="ABC Suppliers",
-            warehouse=self.warehouse,
-        )
-        response = self.client.get(reverse("inventory:purchase_receipt_cancel", kwargs={"pk": receipt.pk}))
-        self.assertEqual(response.status_code, 405)

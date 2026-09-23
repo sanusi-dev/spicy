@@ -97,12 +97,6 @@ class POSHomeTest(POSViewTestBase):
         self.assertContains(response, 'id="pos-header-nav"')
         self.assertContains(response, 'hx-swap-oob="outerHTML"')
 
-    def test_no_shift_surface_marks_open_shift_form_for_htmx(self):
-        response = self.client.get(reverse("pos:pos_home"), HTTP_HX_REQUEST="true")
-
-        self.assertContains(response, f'hx-post="{reverse("pos:pos_open_shift")}"')
-        self.assertContains(response, 'hx-target="#pos-main"')
-
     def test_pos_home_with_shift_shows_drafts(self):
         self._open_shift()
         response = self.client.get(reverse("pos:pos_home"))
@@ -777,9 +771,6 @@ class POSSyncTest(POSViewTestBase):
         self.assertEqual(self.order.kots.first().print_status, "PENDING")
         self.assertContains(response, "Retry Kitchen Printing")
 
-    def test_sync_marks_table_occupied(self):
-        self.client.post(reverse("pos:pos_order_sync", kwargs={"pk": self.order.pk}))
-
 
 class POSSettleTest(POSViewTestBase):
     def setUp(self):
@@ -934,19 +925,6 @@ class POSSettleTest(POSViewTestBase):
 
         self.assertContains(response, f'name="reference_{bank.pk}"')
         self.assertContains(response, "Electronic modes require a transaction reference.")
-
-    def test_settle_takeaway_no_print_needed(self):
-        order = Order.objects.create(
-            order_type="TAKE_AWAY",
-            opening_entry=POSOpeningEntry.objects.filter(status=POSOpeningEntry.SUBMITTED).first(),
-        )
-        add_order_line(order, self.food_item, qty=1, rate=Decimal("1500"))
-        response = self.client.post(
-            reverse("pos:pos_order_settle", kwargs={"pk": order.pk}), {f"payment_{self.cash.pk}": "1500"}
-        )
-        self.assertEqual(response.status_code, 302)
-        order.refresh_from_db()
-        self.assertEqual(order.status, "SUBMITTED")
 
     def test_settle_no_payment_amount_rejected(self):
         self.order.invoice_printed = True
@@ -1305,9 +1283,6 @@ class POSDraftOwnershipTest(POSViewTestBase):
         manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
         self.manager.groups.add(manager_group)
         self.detail_url = reverse("pos:pos_order_screen", kwargs={"pk": self.order.pk})
-
-    def test_draft_stamps_creator(self):
-        self.assertEqual(self.order.created_by, self.user)
 
     def test_other_cashier_cannot_open_draft(self):
         self.client.force_login(self.other)

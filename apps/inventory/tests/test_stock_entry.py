@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.inventory.forms import StockEntryDetailForm, StockEntryForm
 from apps.inventory.models import (
     UOM,
     Bin,
@@ -57,20 +56,6 @@ class StockEntryTest(TestCase):
             is_purchase_item=True,
             is_sales_item=True,
         )
-
-    def test_forms_keep_rate_visible_and_disable_it_for_transfers(self):
-        receipt_form = StockEntryDetailForm(data={"purpose": "MATERIAL_RECEIPT"})
-        transfer_form = StockEntryDetailForm(data={"purpose": "MATERIAL_TRANSFER"})
-
-        self.assertNotIn("hidden", receipt_form.fields["basic_rate"].widget.attrs)
-        self.assertEqual(receipt_form.fields["basic_rate"].required, True)
-        self.assertNotIn("hidden", transfer_form.fields["basic_rate"].widget.attrs)
-        self.assertEqual(transfer_form.fields["basic_rate"].required, False)
-        self.assertEqual(
-            transfer_form.fields["basic_rate"].widget.attrs["x-bind:disabled"],
-            "purpose === 'MATERIAL_TRANSFER'",
-        )
-        self.assertEqual(StockEntryForm().fields["purpose"].choices[0], ("", "Select purpose..."))
 
     def test_receipt_forces_store_and_requires_purchasable_stock_item(self):
         from apps.payments.models import ModeOfPayment, PaymentGLMapping

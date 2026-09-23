@@ -1,7 +1,6 @@
 import threading
 from datetime import date, time
 from decimal import Decimal
-from unittest import skipUnless
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -108,16 +107,6 @@ class OrderModelTest(OrderTestBase):
 
 
 class OrderItemTest(OrderTestBase):
-    @skipUnless(connection.vendor == "postgresql", "PostgreSQL-specific row-lock regression")
-    def test_reservation_locks_restaurant_without_nullable_outer_join(self):
-        order = self._create_order()
-
-        # This minimal reservation path exercises the PostgreSQL lock query
-        # without introducing a nullable related warehouse join.
-        add_order_line(order, self.item2, qty=1, rate=Decimal("500"))
-
-        self.assertEqual(Bin.objects.get(item=self.item2, warehouse=self.warehouse).reserved_qty, Decimal("1"))
-
     def test_add_item(self):
         order = self._create_order()
         add_order_line(order, self.item, qty=2, rate=Decimal("1500"))

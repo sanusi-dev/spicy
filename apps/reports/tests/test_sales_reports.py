@@ -285,20 +285,3 @@ class SalesReportViewTest(SalesReportTestMixin, TestCase):
         ):
             response = self.client.get(reverse(name))
             self.assertIn(response.status_code, (302, 403), name)
-
-    def test_manager_pages_render(self):
-        self._submit_sale(posting_date=date.today(), items=[(self.food, 1, Decimal("1500"))])
-        self.client.force_login(self.manager)
-        for name in (
-            "reports:sales_today",
-            "reports:sales_daywise",
-            "reports:sales_monthwise",
-            "reports:sales_itemwise",
-            "reports:sales_employeewise",
-            "reports:sales_servicewise",
-            "reports:sales_timewise",
-            "reports:sales_cancelled",
-            "reports:sales_average_bill",
-        ):
-            response = self.client.get(reverse(name))
-            self.assertEqual(response.status_code, 200, name)

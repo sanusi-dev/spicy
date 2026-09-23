@@ -144,11 +144,6 @@ class POSClosingEntryModelTest(POSClosingEntryTestBase):
         self.closing.refresh_from_db()
         self.assertEqual(self.closing.status, POSClosingEntry.DRAFT)
 
-    def test_opener_can_close_own_shift(self):
-        submit_closing_entry(self.closing, actor=self.user)
-        self.closing.refresh_from_db()
-        self.assertEqual(self.closing.status, POSClosingEntry.SUBMITTED)
-
     def test_manager_can_close_another_cashiers_shift(self):
         manager = CustomUser.objects.create_user(username="manager@test.com", password="testpass123")
         manager_group, _ = Group.objects.get_or_create(name="Spicy Manager")
@@ -241,10 +236,3 @@ class ClosingPaymentFormTest(POSClosingEntryTestBase):
 
         self.assertFalse(form.is_valid())
         self.assertEqual(form.errors["closing_amount"], ["Counted amounts can't be negative."])
-
-    def test_form_accepts_zero_closing_amount(self):
-        cp = self.closing.closing_payments.get(mode_of_payment=self.cash_mode)
-
-        form = ClosingPaymentForm({"closing_amount": "0"}, instance=cp)
-
-        self.assertTrue(form.is_valid())

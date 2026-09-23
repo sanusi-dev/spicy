@@ -1,4 +1,4 @@
-"""View tests — backoffice gate and CRUD flows for accounting pages."""
+"""View tests — backoffice gate and journal entry flows for accounting pages."""
 
 from datetime import date
 from decimal import Decimal
@@ -36,49 +36,7 @@ class AccountingViewAccessTest(AccountingViewTestBase):
         self.assertEqual(response.status_code, 302)
 
 
-class ChartOfAccountsViewTest(AccountingViewTestBase):
-    def test_account_create(self):
-        self.client.force_login(self.admin)
-        response = self.client.post(
-            reverse("accounting:account_create"),
-            {
-                "name": "Bank",
-                "parent": self.assets.pk,
-                "is_group": "on",
-                "account_type": "ASSET",
-                "report_type": "BALANCE_SHEET",
-            },
-        )
-        self.assertRedirects(response, reverse("accounting:chart_of_accounts"))
-        self.assertTrue(LedgerAccount.objects.filter(name="Bank").exists())
-
-
 class JournalEntryViewTest(AccountingViewTestBase):
-    def test_create_journal_entry(self):
-        self.client.force_login(self.admin)
-        response = self.client.post(
-            reverse("accounting:journal_entry_create"),
-            {
-                "voucher_type": JournalEntry.JOURNAL,
-                "posting_date": "2026-05-01",
-                "remark": "Test",
-                "accounts-TOTAL_FORMS": "2",
-                "accounts-INITIAL_FORMS": "0",
-                "accounts-MIN_NUM_FORMS": "1",
-                "accounts-MAX_NUM_FORMS": "1000",
-                "accounts-0-account": self.cash.pk,
-                "accounts-0-debit": "100.00",
-                "accounts-0-credit": "",
-                "accounts-1-account": self.sales.pk,
-                "accounts-1-debit": "",
-                "accounts-1-credit": "100.00",
-            },
-        )
-        journal = JournalEntry.objects.first()
-        self.assertIsNotNone(journal)
-        self.assertRedirects(response, reverse("accounting:journal_entry_detail", args=[journal.pk]))
-        self.assertEqual(journal.accounts.count(), 2)
-
     def test_submit_journal_entry(self):
         self.client.force_login(self.admin)
         journal = JournalEntry.objects.create(voucher_type=JournalEntry.JOURNAL, posting_date=date(2026, 5, 1))

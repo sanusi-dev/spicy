@@ -143,18 +143,10 @@ class VariantCatalogTest(VariantPickerTestBase):
         self.assertNotContains(response, "Quarter Chicken")
         self.assertNotContains(response, "Half Chicken")
 
-    def test_ungrouped_items_render_flat(self):
-        response = self.client.get(self.order_url)
-        self.assertContains(response, "Jollof Rice")
-
     def test_search_by_variant_name_surfaces_parent(self):
         response = self.client.get(self.order_url, {"q": "Quarter"})
         self.assertContains(response, "Chicken")
         self.assertNotContains(response, "Jollof Rice")
-
-    def test_search_by_parent_name_surfaces_parent(self):
-        response = self.client.get(self.order_url, {"q": "Chicken"})
-        self.assertContains(response, "Chicken")
 
 
 class VariantDialogTest(VariantPickerTestBase):

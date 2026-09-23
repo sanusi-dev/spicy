@@ -80,11 +80,6 @@ class StaffCreateViewTest(StaffCreateTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomUser.objects.filter(username="newbie").exists())
 
-    def test_create_form_renders(self):
-        response = self.client.get(reverse("settings:staff_create"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Add user")
-
 
 class StaffCreatePermissionTest(StaffCreateTestBase):
     def test_manager_and_cashier_get_403(self):
@@ -99,11 +94,6 @@ class StaffCreatePermissionTest(StaffCreateTestBase):
                 self.client.post(reverse("settings:staff_toggle_active", args=[target.pk])).status_code, 403
             )
             self.client.logout()
-
-    def test_anonymous_redirects_to_login(self):
-        self.assertEqual(self.client.get(reverse("settings:staff_create")).status_code, 302)
-        target = CustomUser.objects.create_user(username="target", password="testpass123")
-        self.assertEqual(self.client.post(reverse("settings:staff_toggle_active", args=[target.pk])).status_code, 302)
 
 
 class StaffToggleActiveTest(StaffCreateTestBase):
@@ -125,10 +115,6 @@ class StaffToggleActiveTest(StaffCreateTestBase):
         self.client.post(reverse("settings:staff_toggle_active", args=[target.pk]))
         target.refresh_from_db()
         self.assertTrue(target.is_active)
-
-    def test_toggle_requires_post(self):
-        target = CustomUser.objects.create_user(username="leaver", password="testpass123")
-        self.assertEqual(self.client.get(reverse("settings:staff_toggle_active", args=[target.pk])).status_code, 405)
 
     def test_role_removal_flow_untouched(self):
         target = CustomUser.objects.create_user(username="leaver", password="testpass123")

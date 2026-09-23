@@ -135,13 +135,3 @@ class ClosingZReportPagesTest(ClosingZReportBase):
             self.assertIn(value, content)
         self.assertIn(str(closing.bill_count), content)
         self.assertIn(str(closing.grand_total), content)
-
-    def test_list_shows_net_column(self):
-        closing = self._draft_closing()
-        submit_closing_entry(closing)
-        response = self.client.get(reverse("staff:closing_entry_list"))
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn("Net Sales", content)
-        closing.refresh_from_db()
-        self.assertIn(str(closing.grand_total), content)

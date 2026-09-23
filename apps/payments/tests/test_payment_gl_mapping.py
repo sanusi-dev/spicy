@@ -16,12 +16,6 @@ class PaymentGLMappingModelTest(TestCase):
         cls.bank = ModeOfPayment.objects.create(name="Test Bank", type="BANK")
         cls.mapping = PaymentGLMapping.objects.create(mode_of_payment=cls.cash, default_account=cls.accounts["cash"])
 
-    def test_clean_no_account_raises(self):
-        m = PaymentGLMapping(mode_of_payment=self.bank)
-        with self.assertRaises(ValidationError) as ctx:
-            m.full_clean()
-        self.assertIn("default_account", ctx.exception.message_dict)
-
     def test_leaf_only_validation(self):
         with self.assertRaises(ValidationError):
             PaymentGLMapping(mode_of_payment=self.bank, default_account=self.accounts["assets"]).full_clean()

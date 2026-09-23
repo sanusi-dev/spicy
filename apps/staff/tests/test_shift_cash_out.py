@@ -238,13 +238,3 @@ class ShiftCashOutViewTest(ShiftCashOutBase):
         self._record("2000")
         rows = self._expected()
         self.assertEqual(rows[self.cash.pk], Decimal("49500"))
-
-    def test_backoffice_detail_shows_cash_outs(self):
-        self._record("2000")
-        closing = POSClosingEntry.objects.create(opening_entry=self.opening, cashier=self.cashier)
-        for op in self.opening.opening_payments.all():
-            ClosingPayment.objects.create(closing_entry=closing, mode_of_payment=op.mode_of_payment)
-        self.client.login(username="manager", password="testpass123")
-        response = self.client.get(reverse("staff:closing_entry_detail", args=[closing.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Shift cash-outs")

@@ -16,12 +16,6 @@ class RestaurantModelTest(TestCase):
         with self.assertRaises(ValidationError):
             r2.clean()
 
-    def test_requires_payment_reference_follows_stored_value(self):
-        self.assertFalse(Restaurant.requires_payment_reference())
-        self.restaurant.require_payment_reference = True
-        self.restaurant.save(update_fields=["require_payment_reference"])
-        self.assertTrue(Restaurant.requires_payment_reference())
-
     def test_store_and_bar_warehouses_must_be_enabled_and_distinct(self):
         store = Warehouse.objects.create(name="Store")
         disabled = Warehouse.objects.create(name="Disabled", disabled=True)

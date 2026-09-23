@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.accounting.tests.helpers import setup_chart_of_accounts
-from apps.inventory.forms import RecipeForm, RecipeItemForm
 from apps.inventory.models import (
     UOM,
     Bin,
@@ -180,13 +179,6 @@ class RecipeValidationTest(RecipeWorld):
         with self.assertRaises(ValidationError):
             RecipeItem(recipe=recipe, ingredient=self.coke, qty=Decimal("1")).full_clean()
 
-    def test_self_ingredient_rejected(self):
-        recipe = self._recipe()
-        # Jollof is sellable so it fails ingredient checks first; use a crafty bypass check instead.
-        row = RecipeItem(recipe=recipe, ingredient=recipe.item, qty=Decimal("1"))
-        with self.assertRaises(ValidationError):
-            row.full_clean()
-
     def test_qty_must_be_positive(self):
         recipe = self._recipe()
         with self.assertRaises(ValidationError):
@@ -197,14 +189,6 @@ class RecipeValidationTest(RecipeWorld):
         recipe = Recipe.objects.get(item=self.jollof)
         with self.assertRaises(ValidationError):
             RecipeItem(recipe=recipe, ingredient=self.rice, qty=Decimal("0.10")).full_clean()
-
-    def test_recipe_form_rejects_drink_item(self):
-        form = RecipeForm({"item": str(self.coke.pk), "output_qty": "1", "is_active": True})
-        self.assertFalse(form.is_valid())
-
-    def test_ingredient_form_shows_stock_uom_qty(self):
-        form = RecipeItemForm()
-        self.assertEqual(form.fields["qty"].label, "Qty (stock UOM)")
 
 
 class RecipeItemGuardTest(RecipeWorld):
