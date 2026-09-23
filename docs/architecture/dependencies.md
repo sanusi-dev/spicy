@@ -130,6 +130,6 @@ Shift close
   -> orders.submitted_in_shift and OrderPayment aggregation, minus return refunds
   -> staff.ClosingPayment differences
   -> staff.POSClosingEntry submitted
-  -> accounting.services.post_cash_variance_gl (per-mode variance JournalEntry, when configured)
+  -> accounting.services.post_cash_variance_gl (per-mode variance JournalEntry; fails closed when the matching over/short account is unconfigured)
   -> staff.POSOpeningEntry.closing_entry set
 ```

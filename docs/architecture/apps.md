@@ -68,7 +68,7 @@
 - Services: `staff/services.py` owns opening, closing-draft creation, expected totals, payment aggregation, and close submission.
 - Templates/frontend: `templates/backoffice/staff/*` and `templates/pos/close_shift.html`; POS close uses Alpine previews and HTMX submission.
 - Signals: no staff model signals.
-- Side effects: close submission aggregates orders/payments and links the opening to the closing; canceling a close does not reopen the opening. Since Phase 6, a short/excess variance posts a linked JournalEntry atomically with the close (when the matching account is configured), and canceling a close reverses that journal.
+- Side effects: close submission aggregates orders/payments and links the opening to the closing; canceling a close does not reopen the opening. Since Phase 6, a short/excess variance posts a linked JournalEntry atomically with the close (failing closed when the matching account is unconfigured), and canceling a close reverses that journal.
 
 ### `apps.orders`
 

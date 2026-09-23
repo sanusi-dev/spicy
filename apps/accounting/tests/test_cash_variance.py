@@ -1,4 +1,4 @@
-"""Cash variance posting tests — legs, unconfigured skip, threshold gate, cancel reversal."""
+"""Cash variance posting tests — legs, unconfigured fail-closed, threshold gate, cancel reversal."""
 
 from decimal import Decimal
 
@@ -160,15 +160,27 @@ class NonCashModeVarianceTest(CashVarianceTestBase):
 
 
 class UnconfiguredAccountTest(CashVarianceTestBase):
-    def test_skip_posting_when_account_missing(self):
+    def test_shortage_without_shortage_account_rejected(self):
         self.restaurant.cash_shortage_account = None
         self.restaurant.save()
         closing = self._open_shift()
         self._set_counted(closing, Decimal("49800"))
-        submit_closing_entry(closing, actor=self.manager)
+        with self.assertRaisesMessage(ValidationError, "cash shortage account is not configured"):
+            submit_closing_entry(closing, actor=self.manager)
         closing.refresh_from_db()
+        self.assertEqual(closing.status, POSClosingEntry.DRAFT)
         self.assertIsNone(closing.variance_journal_entry_id)
-        self.assertEqual(closing.total_short_excess, Decimal("-200"))
+
+    def test_excess_without_over_short_account_rejected(self):
+        self.restaurant.cash_over_short_account = None
+        self.restaurant.save()
+        closing = self._open_shift()
+        self._set_counted(closing, Decimal("50200"))
+        with self.assertRaisesMessage(ValidationError, "cash over-short account is not configured"):
+            submit_closing_entry(closing, actor=self.manager)
+        closing.refresh_from_db()
+        self.assertEqual(closing.status, POSClosingEntry.DRAFT)
+        self.assertIsNone(closing.variance_journal_entry_id)
 
 
 class ThresholdGateTest(CashVarianceTestBase):

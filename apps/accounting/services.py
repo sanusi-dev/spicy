@@ -429,9 +429,9 @@ def post_cash_variance_gl(closing):
     """Post a JournalEntry for a closing entry's per-mode short/excess variances.
 
     Each drawer's difference posts to that mode's own mapped account (cash or
-    bank), netting against the over/short accounts. Only posts when the account
-    matching each variance sign is configured; otherwise the variance stays
-    visible on the close with no posting.
+    bank), netting against the over/short accounts. Fails closed when the
+    account matching an existing variance sign is unconfigured — a variance
+    must never close with its books side silently skipped.
     """
     from apps.staff.models import POSClosingEntry
 
@@ -439,7 +439,7 @@ def post_cash_variance_gl(closing):
         return None
     settings = Restaurant.load()
     if settings is None:
-        return None
+        raise ValidationError("Restaurant settings are not configured.")
     mode_legs = []
     total_short = Decimal("0")
     total_over = Decimal("0")
@@ -457,12 +457,8 @@ def post_cash_variance_gl(closing):
     if not mode_legs:
         return None
     if total_short:
-        if settings.cash_shortage_account is None:
-            return None
         shortage_account = _resolve_required_account(settings.cash_shortage_account, label="The cash shortage account")
     if total_over:
-        if settings.cash_over_short_account is None:
-            return None
         over_account = _resolve_required_account(settings.cash_over_short_account, label="The cash over-short account")
 
     journal = JournalEntry.objects.create(
