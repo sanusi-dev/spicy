@@ -13,8 +13,10 @@ class Command(BaseCommand):
         try:
             user = CustomUser.objects.get(username=username)
         except CustomUser.DoesNotExist:
-            raise CommandError(f"No user with username/email {username} found!") from None
+            raise CommandError(f"No user with username {username} found!") from None
         user.is_superuser = True
         user.is_staff = True
         user.save()
-        print(f"{username} successfully promoted to superuser and can now access the admin site")
+        self.stdout.write(
+            self.style.SUCCESS(f"{username} successfully promoted to superuser and can now access the admin site")
+        )

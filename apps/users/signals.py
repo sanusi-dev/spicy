@@ -21,7 +21,7 @@ def update_user_email(sender, request, email_address, **kwargs):
 
 def _notify_admins_of_signup(user):
     mail_admins(
-        f"Yowsers, someone signed up for {settings.PROJECT_METADATA['NAME']}!",
+        f"New signup: {settings.PROJECT_METADATA['NAME']}",
         f"Email: {user.email}",
         fail_silently=True,
     )
@@ -30,11 +30,11 @@ def _notify_admins_of_signup(user):
 @receiver(pre_save, sender=CustomUser)
 def remove_old_profile_picture_on_change(sender, instance, **kwargs):
     if not instance.pk:
-        return False
+        return
 
     old_avatar = sender.objects.filter(pk=instance.pk).values_list("avatar", flat=True).first()
     if not old_avatar:
-        return False
+        return
 
     if old_avatar != instance.avatar.name and default_storage.exists(old_avatar):
         default_storage.delete(old_avatar)

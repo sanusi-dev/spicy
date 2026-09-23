@@ -17,4 +17,4 @@ class Command(BaseCommand):
             [email],
             fail_silently=False,
         )
-        print(f"Sent a test email to {email}.")
+        self.stdout.write(f"Sent a test email to {email}.")
