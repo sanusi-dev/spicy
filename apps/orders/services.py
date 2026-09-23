@@ -27,6 +27,7 @@ from .models import (
     KOT_CANCELLED,
     KOT_PRINT_PENDING,
     KOT_PRINTED,
+    MAX_GUESTS,
     NEW_ORDER,
     ORDER_TYPE_CHOICES,
     SUBMITTED,
@@ -96,7 +97,7 @@ def update_order_meta(order, *, order_type=None, guest_delta=None, guest_count=N
         guest_count = int(guest_count)
     except ValueError, TypeError:
         raise ValidationError("Guest count must be a valid number.") from None
-    guest_count = max(1, min(50, guest_count))
+    guest_count = max(1, min(MAX_GUESTS, guest_count))
     if guest_count != order.guest_count:
         order.change_guest_count(guest_count)
         order.audit("GUEST_COUNT_CHANGED", actor=actor, metadata={"guest_count": guest_count})
@@ -778,14 +779,14 @@ def order_history_rows(filters):
             status=SUBMITTED,
             is_return=False,
             is_paid=True,
-            payments__mode_of_payment__type="CASH",
+            payments__mode_of_payment__type=ModeOfPayment.TYPE_CASH,
         )
     elif status_filter == "sales" and payment_filter == "electronic":
         orders = orders.filter(
             status=SUBMITTED,
             is_return=False,
             is_paid=True,
-            payments__mode_of_payment__type__in=["BANK", "PHONE"],
+            payments__mode_of_payment__type__in=[ModeOfPayment.TYPE_BANK, ModeOfPayment.TYPE_PHONE],
         )
     if order_type_filter in {DINE_IN, TAKE_AWAY}:
         orders = orders.filter(order_type=order_type_filter)

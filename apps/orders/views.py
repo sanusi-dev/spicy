@@ -14,13 +14,15 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from apps.users.decorators import backoffice_required, manager_required
-from apps.utils.csv_export import export_filename, money, over_row_cap, stream_csv, text
+from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 
 from . import services
 from .forms import POSOrderCancelForm
 from .models import (
+    CANCELLED,
     DRAFT,
     KOT,
+    KOT_PRINT_PENDING,
     KOT_PRINT_STATUS_CHOICES,
     KOT_TYPE_CHOICES,
     ORDER_TYPE_CHOICES,
@@ -40,7 +42,7 @@ def orders_dashboard(request: HttpRequest) -> HttpResponse:
     today_summary = todays_orders.aggregate(
         orders=Count("pk"),
         paid=Count("pk", filter=Q(status=SUBMITTED, is_paid=True)),
-        cancelled=Count("pk", filter=Q(status="CANCELLED")),
+        cancelled=Count("pk", filter=Q(status=CANCELLED)),
         revenue=Sum("grand_total", filter=Q(status=SUBMITTED, is_paid=True)),
     )
     recent_orders = (
@@ -53,7 +55,7 @@ def orders_dashboard(request: HttpRequest) -> HttpResponse:
     )
     pending_tickets = (
         KOT.objects.select_related("order", "production_unit", "created_by")
-        .filter(status=SUBMITTED, print_status="PENDING")
+        .filter(status=SUBMITTED, print_status=KOT_PRINT_PENDING)
         .annotate(item_count=Count("items", distinct=True))
         .order_by("created_at")[:8]
     )
@@ -65,7 +67,7 @@ def orders_dashboard(request: HttpRequest) -> HttpResponse:
         "cancelled_today_count": today_summary["cancelled"],
         "today_revenue": today_summary["revenue"] or 0,
         "tickets_today_count": KOT.objects.filter(created_at__date=today).count(),
-        "pending_ticket_count": KOT.objects.filter(status=SUBMITTED, print_status="PENDING").count(),
+        "pending_ticket_count": KOT.objects.filter(status=SUBMITTED, print_status=KOT_PRINT_PENDING).count(),
         "recent_orders": recent_orders,
         "pending_tickets": pending_tickets,
     }
@@ -85,7 +87,7 @@ def order_list(request: HttpRequest) -> HttpResponse:
         ticket_count=Count("kots", distinct=True),
         pending_ticket_count=Count(
             "kots",
-            filter=Q(kots__status=SUBMITTED, kots__print_status="PENDING"),
+            filter=Q(kots__status=SUBMITTED, kots__print_status=KOT_PRINT_PENDING),
             distinct=True,
         ),
     )
@@ -145,10 +147,10 @@ def _order_list_csv(orders, search, status_filter, order_type_filter, date_from,
                 order.get_order_type_display(),
                 text(order.customer_name),
                 order.get_status_display(),
-                money(order.net_total),
-                money(order.grand_total),
-                money(order.paid_amount),
-                money(order.change_amount),
+                money_text(order.net_total),
+                money_text(order.grand_total),
+                money_text(order.paid_amount),
+                money_text(order.change_amount),
             ]
 
     filename = export_filename(
@@ -260,7 +262,7 @@ def kot_list(request: HttpRequest) -> HttpResponse:
             "search": search,
             "kot_type_choices": KOT_TYPE_CHOICES,
             "ticket_type_choices": TICKET_TYPE_CHOICES,
-            "kot_status_choices": [(SUBMITTED, "Submitted"), ("CANCELLED", "Cancelled")],
+            "kot_status_choices": [(SUBMITTED, "Submitted"), (CANCELLED, "Cancelled")],
             "print_status_choices": KOT_PRINT_STATUS_CHOICES,
         },
     )

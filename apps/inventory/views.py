@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.users.decorators import backoffice_required
-from apps.utils.csv_export import export_filename, money, over_row_cap, stream_csv, text
+from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
 from apps.utils.rounding import TWO_PLACES
 
@@ -886,11 +886,11 @@ def _stock_ledger_list_csv(entries, item_id, warehouse_id, date_from, date_to):
                 entry.warehouse.name,
                 text(entry.voucher_type),
                 text(entry.voucher_no),
-                money(entry.quantity),
-                money(entry.unit_rate),
-                money(entry.stock_value_change),
+                money_text(entry.quantity),
+                money_text(entry.unit_rate),
+                money_text(entry.stock_value_change),
                 text(entry.get_variance_type_display() if entry.variance_type else ""),
-                money(entry.variance_amount) if entry.variance_type else "",
+                money_text(entry.variance_amount) if entry.variance_type else "",
             ]
 
     filename = export_filename(

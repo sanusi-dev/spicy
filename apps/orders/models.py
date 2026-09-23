@@ -23,6 +23,8 @@ STATUS_CHOICES = [
     (DISCARDED, "Discarded"),
 ]
 
+MAX_GUESTS = 50
+
 DINE_IN = "DINE_IN"
 TAKE_AWAY = "TAKE_AWAY"
 ORDER_TYPE_CHOICES = [
@@ -355,8 +357,8 @@ class Order(BaseModel):
     def change_guest_count(self, new_count):
         """Set the guest count, refusing to drop below a guest that still has items."""
         self._ensure_editable()
-        if new_count < 1 or new_count > 50:
-            raise ValidationError("Guest count must be between 1 and 50.")
+        if new_count < 1 or new_count > MAX_GUESTS:
+            raise ValidationError(f"Guest count must be between 1 and {MAX_GUESTS}.")
         max_index = self.items.aggregate(m=models.Max("customer_index"))["m"] or 1
         if new_count < max_index:
             raise ValidationError(f"Remove Customer {max_index}'s items before lowering the guest count.")

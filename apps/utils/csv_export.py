@@ -16,7 +16,7 @@ class _Echo:
         return value
 
 
-def money(value):
+def money_text(value):
     """Format a decimal for Excel: raw two-decimal value, no symbol or separators."""
     return f"{value:.2f}" if value is not None else ""
 

@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.users.decorators import manager_required
-from apps.utils.csv_export import export_filename, money, over_row_cap, stream_csv, text
+from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
 
 from .forms import (
@@ -85,11 +85,11 @@ def _daily_pnl_list_csv(qs, status, date_from, date_to):
             yield [
                 entry.business_date.isoformat(),
                 text(entry.status),
-                money(entry.gross_sales_food),
-                money(entry.gross_sales_drinks),
-                money(entry.net_sales),
-                money(entry.gross_profit),
-                money(entry.net_profit),
+                money_text(entry.gross_sales_food),
+                money_text(entry.gross_sales_drinks),
+                money_text(entry.net_sales),
+                money_text(entry.gross_profit),
+                money_text(entry.net_profit),
             ]
 
     filename = export_filename(

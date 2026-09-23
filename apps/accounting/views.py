@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.users.decorators import manager_required
-from apps.utils.csv_export import export_filename, money, over_row_cap, stream_csv, text
+from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
 
 from .forms import (
@@ -283,8 +283,8 @@ def _gl_entry_list_csv(qs, account_id, voucher_type, include_cancelled):
             yield [
                 entry.posting_date.isoformat(),
                 entry.account.name,
-                money(entry.debit),
-                money(entry.credit),
+                money_text(entry.debit),
+                money_text(entry.credit),
                 text(entry.against),
                 text(entry.voucher_type),
                 text(entry.voucher_no),
