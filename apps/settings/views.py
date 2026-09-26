@@ -45,9 +45,7 @@ def _ensure_spicy_groups():
 def settings_dashboard(request: HttpRequest) -> HttpResponse:
     context = {
         "settings_configured": Restaurant.objects.exists(),
-        "staff_count": CustomUser.objects.filter(
-            groups__name__in=["Spicy Admin", "Spicy Manager", "Spicy Cashier"]
-        )
+        "staff_count": CustomUser.objects.filter(groups__name__in=["Spicy Admin", "Spicy Manager", "Spicy Cashier"])
         .distinct()
         .count(),
         "production_unit_count": ProductionUnit.objects.count(),
@@ -81,9 +79,7 @@ def staff_list(request: HttpRequest) -> HttpResponse:
             | models.Q(last_name__icontains=search)
         )
     # Prefetch only Spicy role groups so the per-row role derivation hits the prefetch cache.
-    users = users.prefetch_related(
-        models.Prefetch("groups", queryset=Group.objects.filter(name__in=SPICY_GROUP_NAMES))
-    )
+    users = users.prefetch_related(models.Prefetch("groups", queryset=Group.objects.filter(name__in=SPICY_GROUP_NAMES)))
 
     staff_data = [_build_staff_entry(user) for user in users]
 
