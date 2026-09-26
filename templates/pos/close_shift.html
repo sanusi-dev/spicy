@@ -5,7 +5,7 @@
 {% comment %}Displayed expected/count totals are a client-side preview; submit() recomputes the authoritative cutoff and amounts.{% endcomment %}
 <div class="flex h-full items-start justify-center overflow-y-auto bg-slate-100 p-4 sm:p-6"
      x-data="{
-       totalExpected: Number('{{ total_expected|default:0 }}'),
+       totalExpected: Number('{{ total_expected|default:0|escapejs }}'),
        totalCounted: 0,
        processing: false,
        money(value) { return '₦' + Number(value || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
@@ -45,7 +45,7 @@
         </div>
         <div class="divide-y divide-slate-100">
           {% for payment, form in form_data %}
-            <div class="px-5 py-4 sm:px-6" x-data="{ expected: Number('{{ payment.expected_amount }}'), counted: Number('{{ form.closing_amount.value|default:0 }}') }">
+            <div class="px-5 py-4 sm:px-6" x-data="{ expected: Number('{{ payment.expected_amount|escapejs }}'), counted: Number('{{ form.closing_amount.value|default:0|escapejs }}') }">
               <div class="flex items-center gap-3">
                 <span class="flex size-10 shrink-0 items-center justify-center rounded-xl {% if payment.mode_of_payment.type == 'CASH' %}bg-emerald-50 text-emerald-700{% else %}bg-slate-100 text-slate-600{% endif %}">
                   {% if payment.mode_of_payment.type == "CASH" %}

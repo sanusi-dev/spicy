@@ -2,7 +2,7 @@
 {% comment %}Alpine previews entered totals, balance, and change; the settle view remains authoritative for payment validation.{% endcomment %}
 <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="payment-title" x-data="posModalDialog({ closeUrl: '{% url 'pos:pos_order_screen' order.pk %}' })" x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" @keydown.escape.window="close()" @keydown.tab="trapFocus($event)">
   <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="close()"></div>
-  <div class="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl" x-ref="panel" x-data="{ total: Number('{{ order.rounded_total }}'), entered: 0, processing: false }" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+  <div class="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl" x-ref="panel" x-data="{ total: Number('{{ order.rounded_total|escapejs }}'), entered: 0, processing: false }" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
     <form method="post" action="{% url 'pos:pos_order_settle' order.pk %}" @input="entered = Array.from($el.querySelectorAll('input[name^=payment_]')).reduce((sum, input) => sum + (Number(input.value) || 0), 0)" @submit="processing = true">
       {% csrf_token %}
       <div class="grid lg:grid-cols-[1.15fr_0.85fr]">
