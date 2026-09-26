@@ -319,8 +319,9 @@ department) → `Restaurant.default_income_account`; expense/COGS always uses
 3. No tax GL. There is no tax system.
 4. COGS at settle from the current WAC (`unit_rate`) of the settle-time drink stock deductions.
 5. Inventory documents post GL (see §4.9): purchase receipts Dr SIH / Cr GRNI; stock-entry
-   market receipts Dr SIH / Cr the payment mode's GL account ("Paid from"); transfers are intra-inventory (no GL); waste
-   reconciliations Dr wastage / Cr warehouse.
+   market receipts Dr SIH / Cr the payment mode's GL account ("Paid from"); transfers move
+   value Dr destination SIH / Cr Store SIH at the source WAC; waste reconciliations Dr
+   wastage / Cr warehouse.
 6. Return orders post no GL in the GL core; refund GL posts in refunds completion (§4.3),
    within the same phase.
 7. Amendment chain (`amended_from`) applies to JournalEntry only. Write-off vouchers are
@@ -673,7 +674,7 @@ override. Electricity optional (blank = ₦0).
 **Business rules:**
 
 - Sale/consumption/waste: current WAC, outbound `unit_rate=wac`, `stock_value_change=−qty×wac`, WAC unchanged. Negative stock prohibited everywhere.
-- Transfer A→B: source `−qty×source_wac`, dest `+qty×source_wac` then dest recalculates WAC; net 0. Cancel: dest `−qty×dest_current_wac`, source `+qty×dest_current_wac`, source recalculates; net 0.
+- Transfer A→B: source `−qty×source_wac`, dest `+qty×source_wac` then dest recalculates WAC; net 0. Transfer lines carry no rate (`basic_rate`/`amount` zeroed on save — transfers are not purchases). Cancel: dest `−qty×dest_current_wac`, source `+qty×original_transfer_value` with drift `qty*(dest_current_wac − original)` stamped `CANCELLATION_WAC` on the Store reversal; GL Dr Store SIH @ original / Cr dest SIH @ current / drift to `inventory_price_variance_account` (shared accounts post nothing).
 - Reconciliation: `OPENING_STOCK` or `qty==0` + `+qty` → require entered `valuation_rate` to seed WAC; else current WAC.
 - Receipt cancellation (D6): blocked if downstream invoice/payment active; else `Cr SIH @ current WAC / Dr GRNI @ original` → diff to `variance_amount` (`CANCELLATION_WAC`) → `inventory_price_variance_account`. No partial.
 - Return: `+qty×settle-time WAC` back to Bin, exactly reversing the sale's deduction; no variance leg.

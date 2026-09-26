@@ -124,6 +124,8 @@ class ItemAdmin(admin.ModelAdmin):
 
 @admin.register(Bin)
 class BinAdmin(admin.ModelAdmin):
+    """View-only — bins change only through the stock ledger services."""
+
     list_display = ("item", "warehouse", "actual_qty", "reserved_qty", "valuation_rate", "display_stock_value")
     list_filter = ("warehouse",)
     list_select_related = ("item", "warehouse")
@@ -133,9 +135,20 @@ class BinAdmin(admin.ModelAdmin):
     def display_stock_value(self, obj):
         return obj.stock_value
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(StockLedgerEntry)
 class StockLedgerEntryAdmin(admin.ModelAdmin):
+    """View-only — the ORM guard rejects edits regardless of admin permissions."""
+
     list_display = (
         "posting_datetime",
         "posting_date",
@@ -155,19 +168,14 @@ class StockLedgerEntryAdmin(admin.ModelAdmin):
     search_fields = ("item__item_name", "item__item_code", "voucher_no", "warehouse__name")
     ordering = ("-posting_datetime",)
 
-    def get_readonly_fields(self, request, obj=None):
-        if dev_admin_bypass(request):
-            return super().get_readonly_fields(request, obj)
-        return [field.name for field in self.model._meta.fields]
-
     def has_add_permission(self, request):
-        return bool(dev_admin_bypass(request))
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return bool(dev_admin_bypass(request))
+        return False
 
     def has_delete_permission(self, request, obj=None):
-        return bool(dev_admin_bypass(request))
+        return False
 
 
 class StockEntryDetailInline(SubmittedInlineMixin, admin.TabularInline):

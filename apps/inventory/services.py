@@ -392,7 +392,6 @@ def submit_stock_entry(entry):
                 voucher_no=voucher_no,
                 unit_rate=unit_rate,
                 voucher_detail_no=str(detail.pk),
-                prevent_negative=False,
                 posting_date=locked.posting_date,
                 inbound_value=detail.amount,
                 bin_obj=store_bin,
@@ -417,7 +416,6 @@ def submit_stock_entry(entry):
                 voucher_no=voucher_no,
                 unit_rate=None,
                 voucher_detail_no=str(detail.pk),
-                prevent_negative=True,
                 posting_date=locked.posting_date,
                 bin_obj=store_bin,
             )
@@ -429,7 +427,6 @@ def submit_stock_entry(entry):
                 voucher_no=voucher_no,
                 unit_rate=outgoing.unit_rate,
                 voucher_detail_no=str(detail.pk),
-                prevent_negative=False,
                 posting_date=locked.posting_date,
                 bin_obj=locked_bins[(detail.item_id, target.pk)],
             )
@@ -510,6 +507,12 @@ def cancel_stock_entry(entry):
             store_bin = locked_bins.get((detail.item_id, restaurant.store_warehouse_id))
             if not dest_bin or not store_bin:
                 continue
+            if dest_bin.actual_qty < detail.qty:
+                used = detail.qty - dest_bin.actual_qty
+                raise ValidationError(
+                    f"This transfer cannot be cancelled — {used} of {detail.qty} {detail.item.item_name} "
+                    f"have already been used from {tgt.name}. Transfer the remainder back or file an adjustment."
+                )
             dest_wac = dest_bin.valuation_rate or Decimal("0")
             orig_dest = next(
                 (
@@ -529,8 +532,17 @@ def cancel_stock_entry(entry):
                 ),
                 None,
             )
-            dest_reversal = StockLedgerEntry._create_entry_locked(
-            # Destination returns at current WAC vs the original transfer value; the drift posts as CANCELLATION_WAC variance.
+            # Destination returns at current WAC; the drift vs the original transfer value posts as CANCELLATION_WAC.
+            curr_value = money(detail.qty * dest_wac)
+            if orig_store is not None:
+                orig_value = money(abs(orig_store.stock_value_change))
+                unit_rate = orig_store.unit_rate
+            else:
+                orig_value = curr_value
+                unit_rate = dest_wac
+            variance = curr_value - orig_value
+            variance_type = "CANCELLATION_WAC" if variance else ""
+            StockLedgerEntry._create_entry_locked(
                 item=detail.item,
                 warehouse=tgt,
                 quantity=-detail.qty,
@@ -538,7 +550,6 @@ def cancel_stock_entry(entry):
                 voucher_no=voucher_no,
                 unit_rate=None,
                 voucher_detail_no=str(detail.pk),
-                prevent_negative=True,
                 posting_date=timezone.localdate(),
                 reversal_of_sle_id=orig_dest.pk if orig_dest else None,
                 bin_obj=dest_bin,
@@ -549,28 +560,37 @@ def cancel_stock_entry(entry):
                 quantity=detail.qty,
                 voucher_type="Stock Entry Cancellation",
                 voucher_no=voucher_no,
-                unit_rate=dest_wac,
+                unit_rate=unit_rate,
                 voucher_detail_no=str(detail.pk),
-                prevent_negative=False,
                 posting_date=timezone.localdate(),
+                variance_amount=variance,
+                variance_type=variance_type,
                 reversal_of_sle_id=orig_store.pk if orig_store else None,
                 bin_obj=store_bin,
             )
-            value = money(abs(dest_reversal.stock_value_change))
-            if value and restaurant.store_warehouse.account_id != tgt.account_id:
             # Drift between current and original value posts to the variance account.
+            if curr_value and restaurant.store_warehouse.account_id != tgt.account_id:
                 reversal_rows.append(
                     {
                         "account": _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account"),
-                        "debit": value,
+                        "debit": orig_value,
                     }
                 )
                 reversal_rows.append(
                     {
                         "account": _resolve_account(tgt.account, f"The {tgt.name} warehouse account"),
-                        "credit": value,
+                        "credit": curr_value,
                     }
                 )
+                if variance:
+                    variance_acct = _resolve_account(
+                        restaurant.inventory_price_variance_account,
+                        "The inventory price variance account",
+                    )
+                    if variance > 0:
+                        reversal_rows.append({"account": variance_acct, "debit": variance})
+                    else:
+                        reversal_rows.append({"account": variance_acct, "credit": -variance})
         gl_originals = list(
             GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=voucher_no, is_cancelled=False)
         )
@@ -611,7 +631,6 @@ def cancel_stock_entry(entry):
                     voucher_no=voucher_no,
                     unit_rate=None,
                     voucher_detail_no=sle.voucher_detail_no,
-                    prevent_negative=sle.quantity > 0,
                     posting_date=timezone.localdate(),
                     variance_amount=variance,
                     variance_type=variance_type,
@@ -772,7 +791,6 @@ def submit_stock_reconciliation(reconciliation, actor=None):
                 voucher_no=voucher_no,
                 unit_rate=None,
                 voucher_detail_no=str(line.pk),
-                prevent_negative=True,
                 posting_date=locked.posting_date,
                 bin_obj=bin_obj,
             )
@@ -812,7 +830,6 @@ def submit_stock_reconciliation(reconciliation, actor=None):
             voucher_no=voucher_no,
             unit_rate=rate,
             voucher_detail_no=str(line.pk),
-            prevent_negative=False,
             posting_date=locked.posting_date,
             bin_obj=bin_obj,
         )
@@ -887,7 +904,6 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
                 voucher_no=voucher_no,
                 unit_rate=None,
                 voucher_detail_no=sle.voucher_detail_no,
-                prevent_negative=sle.quantity > 0,
                 posting_date=timezone.localdate(),
                 reversal_of_sle_id=sle.pk,
                 bin_obj=bin_obj,
@@ -974,7 +990,6 @@ def submit_purchase_receipt(receipt):
             voucher_no=str(locked.pk),
             unit_rate=unit_rate,
             voucher_detail_no=str(line.pk),
-            prevent_negative=False,
             posting_date=locked.posting_date,
             inbound_value=line.amount,
             bin_obj=locked_bins[line.item_id],
@@ -1060,7 +1075,6 @@ def cancel_purchase_receipt(receipt):
             voucher_no=voucher_no,
             unit_rate=None,
             voucher_detail_no=sle.voucher_detail_no,
-            prevent_negative=True,
             posting_date=timezone.localdate(),
             variance_amount=variance,
             variance_type=variance_type,

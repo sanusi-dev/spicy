@@ -45,4 +45,4 @@ Tests cover order sequence concurrency, drink reservation concurrency, one-open-
 
 ## Bypass Points
 
-Direct `QuerySet.update()`, direct admin edits, and low-level `StockLedgerEntry.create_entry()` can bypass model workflow guards. `editable=False` affects forms/admin presentation, not arbitrary ORM writes. When tracing corrupted state, search for management commands, admin actions, data migrations, and direct updates in addition to service calls.
+Direct `QuerySet.update()` and low-level `StockLedgerEntry.create_entry()` can bypass service workflow guards. `editable=False` affects forms/admin presentation, not arbitrary ORM writes. When tracing corrupted state, search for management commands, admin actions, data migrations, and direct updates in addition to service calls. `StockLedgerEntry` update/delete raises at the model level, and the `Bin`/`StockLedgerEntry` admin pages are view-only.

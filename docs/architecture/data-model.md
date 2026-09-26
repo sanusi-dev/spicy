@@ -65,7 +65,7 @@ Most project domain models extend `apps.utils.models.BaseModel`, adding `created
 
 ## Stock Entities
 
-- `Bin`: current actual quantity, reserved quantity, valuation rate, and stock value for one item/warehouse pair.
+- `Bin`: current actual quantity, reserved quantity, valuation rate, and stock value for one item/warehouse pair. Outbound ledger moves may never drive actual below reserved; document cancellations are blocked by the same floor.
 - `StockLedgerEntry`: signed PWAC movement (`quantity`, `unit_rate`, `stock_value_change`). The voucher type/number/detail fields link it back to source documents.
 - `StockEntry` and `StockEntryDetail`: receipt or Store-to-Kitchen/Bar transfer. Receipt lines record the `uom` bought in (stock unit or a conversion row) and a snapshotted `conversion_factor`; submit posts `qty × factor` and blends WAC on the as-bought `amount`, mirroring `PurchaseReceiptItem`. Transfer lines stay in the stock unit. `StockEntry.mode_of_payment` records the funding account ("Paid from") for market receipts.
 - `StockReconciliation` and `StockReconciliationItem`: adjustment with `reason` (`OPENING_STOCK` first seeding of a fresh warehouse only, `ADJUSTMENT` counted quantity up or down, `CONSUMPTION` end-of-day kitchen count that cannot exceed the bin, `WASTE_DAMAGE` quantity wasted as a positive delta). Opening posts Dr warehouse / Cr temporary opening; Adjustment Dr stock adjustment / Cr warehouse (inbound reverses); Consumption Dr Kitchen unit expense (else default expense) / Cr kitchen; Waste Dr wastage / Cr warehouse. `remarks` is optional; submit/cancel stamp `submitted_by`/`submitted_at` and `cancelled_by`/`cancelled_at`.
@@ -113,7 +113,7 @@ Most project domain models extend `apps.utils.models.BaseModel`, adding `created
 - `OrderItem` constrains positive normal quantity, non-negative rate, customer index, `department` ∈ FOOD/DRINKS (never NULL), and `not_restockable` on return lines only (DB check constraint); return lines are negative and linked to source lines.
 - `Order.save()`, `OrderItem.save/delete()`, `OrderPayment.save/delete()`, KOT saves, and audit-event saves enforce historical protections.
 - Inventory document saves reject most post-submit mutations, but service functions remain required because direct status changes can bypass posting.
-- `StockLedgerEntry` has no model-level save/delete immutability guard; `editable=False` does not protect direct ORM writes.
+- `StockLedgerEntry.save()` rejects updates and `delete()` raises unconditionally (mirror of `GLEntry`); `Bin` has no ORM guard because ledger services legitimately write it, so the admin surfaces for both are view-only.
 
 ## Migration History Signals
 

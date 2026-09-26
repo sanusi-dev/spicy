@@ -84,7 +84,7 @@
 
 - URLs: `accounting/urls.py` exposes the dashboard, chart of accounts, journal entries, read-only GL entries, and fiscal years under `/backoffice/accounting/`, all behind the manager gate.
 - Models/forms: `LedgerAccount`, `FiscalYear`, `GLEntry`, `JournalEntry`, `JournalEntryAccount` in `accounting/models.py`; forms in `accounting/forms.py` (journal rows use an inline formset).
-- Services: `accounting/services.py` owns order settle GL (`post_order_gl`), cancellation reversal (`reverse_order_gl`), refund GL (`post_refund_gl`), and shift-close cash variance posting (`post_cash_variance_gl`).
+- Services: `accounting/services.py` owns order settle GL (`post_order_gl`), refund GL (`post_refund_gl`), and shift-close cash variance posting (`post_cash_variance_gl`).
 - Templates/frontend: `templates/backoffice/accounting/*`; the chart of accounts is a recursive tree with expand/collapse, opening journals go through a read-only review screen before submit, journal entries use the standard formset add/remove pattern, and GL entries are a filtered read-only table.
 - Side effects: `GLEntry` is immutable — reversal postings mark originals cancelled and write mirror rows dated the cancellation day. `JournalEntry.submit()` posts to the GL; `cancel()` posts reversals dated today; `amend()` copies a cancelled entry into a new draft dated today, once per cancelled entry.
 - Management: `accounting/management/commands/seed_chart_of_accounts.py` idempotently seeds the chart and current fiscal year, and fills Restaurant/warehouse/production-unit/payment GL FKs only when they are currently null.
@@ -132,7 +132,7 @@
 
 ## Inventory
 
-Inventory is both a master-data app and a posting engine. `Item` is shared by menu and order lines. `Bin` is the current item/warehouse snapshot; `StockLedgerEntry` is the movement history. Stock Entry, Stock Reconciliation, and Purchase Receipt are draft documents whose service functions create immutable-by-convention ledger movements and reversal rows.
+Inventory is both a master-data app and a posting engine. `Item` is shared by menu and order lines. `Bin` is the current item/warehouse snapshot (written only by ledger services; admin is view-only); `StockLedgerEntry` is the movement history, immutable at the model level. Stock Entry, Stock Reconciliation, and Purchase Receipt are draft documents whose service functions create ledger movements and reversal rows.
 
 ## Menu
 

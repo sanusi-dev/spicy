@@ -337,6 +337,14 @@ class StockLedgerEntry(BaseModel):
         sign = "+" if self.quantity >= 0 else ""
         return f"{sign}{self.quantity} {self.item.item_code} @ {self.warehouse.name}"
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Stock ledger entries are immutable; post a reversal instead.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Stock ledger entries cannot be deleted.")
+
     @classmethod
     def create_entry(
         cls,
@@ -348,7 +356,6 @@ class StockLedgerEntry(BaseModel):
         *,
         unit_rate=None,
         voucher_detail_no="",
-        prevent_negative=False,
         posting_date=None,
         variance_amount=Decimal("0"),
         variance_type="",
@@ -374,7 +381,6 @@ class StockLedgerEntry(BaseModel):
                 voucher_no=voucher_no,
                 unit_rate=unit_rate,
                 voucher_detail_no=voucher_detail_no,
-                prevent_negative=prevent_negative,
                 posting_date=posting_date,
                 variance_amount=variance_amount,
                 variance_type=variance_type,
@@ -394,7 +400,6 @@ class StockLedgerEntry(BaseModel):
         voucher_no,
         unit_rate,
         voucher_detail_no,
-        prevent_negative,
         bin_obj,
         posting_date=None,
         variance_amount=Decimal("0"),
@@ -446,6 +451,12 @@ class StockLedgerEntry(BaseModel):
             # Outbound: always at current WAC; WAC unchanged.
             resolved_rate = wac
             stock_value_change = quantity * wac
+            # Reservations are promises to open drafts — actual may never fall below them.
+            if new_qty < (bin_obj.reserved_qty or Decimal("0")):
+                raise InsufficientStock(
+                    f"Stock for {item.item_name} in {warehouse.name} is reserved for open orders; "
+                    "resolve the reservations first."
+                )
         else:
             raise ValidationError("Quantity cannot be zero.")
 
@@ -608,6 +619,10 @@ class StockEntryDetail(BaseModel):
             self._derive_conversion()
             if self.stock_entry_id and self.stock_entry.purpose == "MATERIAL_RECEIPT":
                 self.amount = money(Decimal(str(self.qty)) * Decimal(str(self.basic_rate)))
+            elif self.stock_entry_id and self.stock_entry.purpose == "MATERIAL_TRANSFER":
+                # Transfers carry no rate — value moves at the source warehouse's WAC.
+                self.basic_rate = Decimal("0")
+                self.amount = Decimal("0")
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

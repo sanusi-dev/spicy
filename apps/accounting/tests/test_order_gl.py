@@ -1,5 +1,5 @@
 """Order GL tests — settle legs, departmental income split, change, rounding, COGS,
-cancel reversal, missing-account failures, fiscal year guard."""
+refund GL, missing-account failures, fiscal year guard."""
 
 from decimal import Decimal
 
@@ -208,23 +208,6 @@ class OrderSettleGLTest(OrderGLTestBase):
         add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
         with self.assertRaisesMessage(ValidationError, "default income account"):
             self._settle(order)
-
-
-class OrderCancelGLTest(OrderGLTestBase):
-    def test_reverse_order_gl_posts_mirrored_entries(self):
-        order = self._create_order()
-        add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
-        self._settle(order)
-        # Paid orders cannot be cancelled via cancel_order; the reversal is
-        # invoked directly (as the refund flow does).
-        from apps.accounting.services import reverse_order_gl
-
-        reverse_order_gl(order)
-        entries = self._order_gl(order)
-        self.assertEqual(entries.filter(is_cancelled=True).count(), 2)
-        self.assertEqual(entries.filter(is_cancelled=False).count(), 2)
-        reversal = entries.filter(is_cancelled=False, account=self.accounts["cash"]).first()
-        self.assertEqual(reversal.credit, Decimal("1500"))
 
 
 class RefundGLTest(OrderGLTestBase):

@@ -169,8 +169,8 @@ class StockEntryTest(TestCase):
         self.assertEqual(legs.filter(account=kitchen_account, debit=Decimal("200")).count(), 1)
         self.assertEqual(legs.filter(account=store_account, credit=Decimal("200")).count(), 1)
 
-        # A later receipt lifts the destination WAC to 200; cancellation pulls the
-        # stock back at the destination's current WAC.
+        # A later receipt lifts the destination WAC to 200; cancellation gives the
+        # stock back to Store at its original value and routes the drift to variance.
         StockLedgerEntry.create_entry(
             item=self.food,
             warehouse=self.kitchen,
@@ -185,9 +185,22 @@ class StockEntryTest(TestCase):
             GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk), is_cancelled=True).count(), 2
         )
         reversal = GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk), is_cancelled=False)
-        self.assertEqual(reversal.filter(account=store_account, debit=Decimal("400")).count(), 1)
+        self.assertEqual(reversal.filter(account=store_account, debit=Decimal("200")).count(), 1)
         self.assertEqual(reversal.filter(account=kitchen_account, credit=Decimal("400")).count(), 1)
+        self.assertEqual(reversal.filter(account=self.accounts["variance"], debit=Decimal("200")).count(), 1)
         self.assertEqual(reversal.first().posting_date, timezone.localdate())
+        # Store is restored at what it originally gave up: 2 back @ 100 => WAC 100.
+        store_bin = Bin.objects.get(item=self.food, warehouse=self.store)
+        self.assertEqual(store_bin.valuation_rate, Decimal("100"))
+
+    def test_transfer_line_carries_no_rate(self):
+        # Transfer lines don't price anything — value moves at the source WAC.
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
+        line = StockEntryDetail.objects.create(
+            stock_entry=entry, item=self.food, qty=Decimal("2"), basic_rate=Decimal("350")
+        )
+        line.refresh_from_db()
+        self.assertEqual((line.basic_rate, line.amount), (Decimal("0"), Decimal("0")))
 
     def test_transfer_rejects_override_and_negative_store(self):
         entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
@@ -220,15 +233,17 @@ class StockEntryTest(TestCase):
         StockLedgerEntry.create_entry(
             item=self.food, warehouse=self.kitchen, quantity=Decimal("-2"), voucher_type="Consumption", voucher_no="1"
         )
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesMessage(ValidationError, "already been used"):
             cancel_stock_entry(entry)
         entry.refresh_from_db()
         self.assertEqual(entry.status, "SUBMITTED")
         self.assertFalse(StockLedgerEntry.objects.filter(voucher_type="Stock Entry Cancellation").exists())
 
-    def test_cancel_transfer_uses_current_target_wac(self):
+    def test_cancel_transfer_restores_source_at_original_value(self):
         # Store 2@100, kitchen 1@300. Transfer 1 at store WAC 100.
-        # After transfer: kitchen WAC (1*300+1*100)/2=200. Cancel uses dest current WAC 200.
+        # After transfer: kitchen WAC (1*300+1*100)/2=200. Cancel restores Store
+        # at the original transfer value 100; the 100 drift to Kitchen's current
+        # valuation is stamped CANCELLATION_WAC (GL nets to zero — shared SIH).
         StockLedgerEntry.create_entry(
             item=self.food,
             warehouse=self.store,
@@ -257,16 +272,19 @@ class StockEntryTest(TestCase):
         self.assertEqual(target_reversal.unit_rate, Decimal("200"))
         self.assertEqual(target_reversal.quantity, Decimal("-1"))
         self.assertEqual(target_reversal.posting_date, timezone.localdate())
-        # Source reversal inbound at dest WAC 200
-        self.assertEqual(source_reversal.unit_rate, Decimal("200"))
+        # Source reversal inbound at the original transfer rate 100, with the
+        # cross-warehouse drift stamped as variance.
+        self.assertEqual(source_reversal.unit_rate, Decimal("100"))
         self.assertEqual(source_reversal.quantity, Decimal("1"))
+        self.assertEqual(source_reversal.variance_amount, Decimal("100"))
+        self.assertEqual(source_reversal.variance_type, "CANCELLATION_WAC")
         kitchen_bin = Bin.objects.get(item=self.food, warehouse=self.kitchen)
         self.assertEqual(kitchen_bin.actual_qty, Decimal("1"))
         self.assertEqual(kitchen_bin.valuation_rate, Decimal("200"))
-        # Store after cancel: 1*100 +1*200 blended => 150
+        # Store after cancel: 1*100 +1*100 blended => 100
         store_bin = Bin.objects.get(item=self.food, warehouse=self.store)
         self.assertEqual(store_bin.actual_qty, Decimal("2"))
-        self.assertEqual(store_bin.valuation_rate, Decimal("150"))
+        self.assertEqual(store_bin.valuation_rate, Decimal("100"))
         history = StockEntry.stock_ledger_entries_for_voucher(str(entry.pk))
         self.assertEqual(history.count(), 4)
         self.assertEqual(
