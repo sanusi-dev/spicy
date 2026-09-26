@@ -485,12 +485,12 @@ The statement partial accepts either live `LineSpec` dataclasses (preview) or sa
 
 ## 14. Compute, step by step
 
-`compute_daily_pnl(pnl)` in `apps/reports/services.py` builds a `Computation` (totals, lines, cogs_rows, consumption_rows, theoretical_rows, unmapped_rows). Nothing is written yet.
+`compute_daily_pnl(pnl)` in `apps/reports/services.py` builds a `Computation` (totals, lines, cogs_rows, consumption_rows, theoretical_rows, unmapped_rows, `food_usage_counted`). Nothing is written yet.
 
 1. Load settings. Build `[start, end)` from `business_date` + start hour.
 2. Collect submitted orders in that window (`orders_in_window` then `sales_by_department`, `round_off`).
-3. Drink COGS + item rows (`drink_cogs`). Food usage via `inventory.services.compute_food_usage()` — actual, theoretical, variance, unmapped.
-4. Append sales / round-off / net sales / COGS (food actual + drinks) / theoretical + variance memo lines.
+3. Drink COGS + item rows (`drink_cogs`). Food usage via `inventory.services.compute_food_usage()` — actual, theoretical, variance, unmapped, and a `counted` flag (True when at least one SUBMITTED `CONSUMPTION`/`WASTE_DAMAGE` reconciliation exists for the Kitchen on the business date).
+4. Append sales / round-off / net sales / COGS (food actual + drinks) / theoretical + variance memo lines. `food_usage_counted = usage.counted or food sales == 0` — a food-sales day with no consumption count is flagged.
 5. Directs: electricity if readings exist; each material with qty > 0; `DIRECT_DAILY` templates; ad-hoc DIRECT rows.
 6. Gross profit from the formulas in §6.
 7. Employee: override **or** employee templates.

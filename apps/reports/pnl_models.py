@@ -41,6 +41,7 @@ class DailyPnL(BaseModel):
     electricity_closing = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     electricity_rate = models.DecimalField(max_digits=14, decimal_places=4, default=Decimal("0"), editable=False)
     employee_cost_override = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    food_usage_counted = models.BooleanField(default=True, editable=False)
     remarks = models.TextField(blank=True)
     amended_from = models.ForeignKey(
         "self",

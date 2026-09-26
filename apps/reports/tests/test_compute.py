@@ -205,6 +205,19 @@ class FoodCogsTest(DailyPnLTestMixin, TestCase):
     def setUpTestData(cls):
         cls._setup_pnl_world()
 
+    def test_submit_freezes_food_usage_counted_flag(self):
+        order = self._create_order()
+        add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
+        self._settle(order)
+        pnl = self._draft()
+        pnl.submit(actor=self.manager)
+        self.assertFalse(pnl.food_usage_counted)
+        # Filing the count afterwards does not rewrite a submitted document.
+        rice, _recipe = self._rice_with_recipe()
+        self._consume_all(rice)
+        pnl.refresh_from_db()
+        self.assertFalse(pnl.food_usage_counted)
+
     def _rice_with_recipe(self, qty="0.20", rate="200"):
         from apps.inventory.models import Bin, Item
 
@@ -259,6 +272,28 @@ class FoodCogsTest(DailyPnLTestMixin, TestCase):
         self.assertEqual(computation.totals["cogs_drinks"], Decimal("600"))
         self.assertEqual(computation.totals["cogs"], Decimal("1600"))
         self.assertEqual(computation.totals["prime_cost"], Decimal("1600"))
+
+    def test_uncounted_food_usage_flagged_when_no_consumption_rec(self):
+        self._rice_with_recipe()
+        order = self._create_order()
+        add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
+        self._settle(order)
+        computation = compute_daily_pnl(self._draft())
+        self.assertFalse(computation.food_usage_counted)
+
+    def test_counted_when_consumption_rec_submitted(self):
+        rice, _recipe = self._rice_with_recipe()
+        self._consume_all(rice)
+        order = self._create_order()
+        add_order_line(order, self.food, qty=1, rate=Decimal("1500"), menu_item=self.food_mi)
+        self._settle(order)
+        computation = compute_daily_pnl(self._draft())
+        self.assertTrue(computation.food_usage_counted)
+
+    def test_no_food_sales_never_flagged(self):
+        # A drinks-only day needs no kitchen count.
+        computation = compute_daily_pnl(self._draft())
+        self.assertTrue(computation.food_usage_counted)
 
     def test_submitted_snapshot_stable_after_recipe_edit(self):
         rice, recipe = self._rice_with_recipe()

@@ -63,6 +63,7 @@ class FoodUsage:
     theoretical_cost: Decimal = Decimal("0")
     actual_cost: Decimal = Decimal("0")
     variance_cost: Decimal = Decimal("0")
+    counted: bool = True
 
 
 def _kitchen_warehouse():
@@ -163,6 +164,7 @@ def compute_food_usage(business_date):
             usage.dishes.append(DishShare(dish_name=dish_name, qty=qty_add))
 
     kitchen = _kitchen_warehouse()
+    counted = False
     actual = {}
     if kitchen is not None:
         recs = list(
@@ -173,6 +175,7 @@ def compute_food_usage(business_date):
                 warehouse=kitchen,
             )
         )
+        counted = bool(recs)
         reason_by_no = {str(rec.pk): rec.reason for rec in recs}
         if reason_by_no:
             sles = (
@@ -247,6 +250,7 @@ def compute_food_usage(business_date):
         theoretical_cost=money(sum((u.theoretical_amount for u in usages), ZERO)),
         actual_cost=money(sum((u.actual_amount for u in usages), ZERO)),
         variance_cost=money(sum((u.variance_amount for u in usages), ZERO)),
+        counted=counted,
     )
 
 

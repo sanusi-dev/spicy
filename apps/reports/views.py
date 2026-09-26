@@ -122,6 +122,7 @@ def _form_context(pnl, form, materials, adhoc, *, preview=None):
         "pnl": pnl,
         "is_create": False,
         "preview": preview,
+        "food_usage_counted": preview.food_usage_counted if preview else True,
     }
 
 
@@ -167,6 +168,7 @@ def daily_pnl_detail(request: HttpRequest, pk: int) -> HttpResponse:
             "consumption_rows": pnl.consumption_rows.all(),
             "theoretical_rows": pnl.theoretical_rows.all(),
             "unmapped_rows": pnl.unmapped_rows.all(),
+            "food_usage_counted": pnl.food_usage_counted,
         },
     )
 
@@ -194,7 +196,11 @@ def daily_pnl_preview(request: HttpRequest, pk: int) -> HttpResponse:
                 "backoffice/reports/_statement.html",
                 {"preview_error": e.messages[0] if e.messages else str(e)},
             )
-        return render(request, "backoffice/reports/_statement.html", {"preview": preview, "pnl": pnl})
+        return render(
+            request,
+            "backoffice/reports/_statement.html",
+            {"preview": preview, "pnl": pnl, "food_usage_counted": preview.food_usage_counted},
+        )
     return render(
         request,
         "backoffice/reports/daily_pnl_form.html",

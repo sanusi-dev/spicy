@@ -1,4 +1,9 @@
 {% comment %}Three-column Daily P&L statement. Expects `rows` (LineSpec or DailyPnLLine).{% endcomment %}
+{% if not food_usage_counted %}
+  <div class="rounded-xl bg-amber-50 border border-amber-200 p-4 mb-4 text-sm text-amber-900 font-medium">
+    Food usage was not counted for this date — actual food cost reads ₦0 and is unknown. File a kitchen consumption or waste reconciliation for the business date.
+  </div>
+{% endif %}
 {% if preview_error %}
   <div class="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 font-medium">{{ preview_error }}</div>
 {% else %}

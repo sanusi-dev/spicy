@@ -71,6 +71,7 @@ class Computation:
     consumption_rows: list = field(default_factory=list)
     theoretical_rows: list = field(default_factory=list)
     unmapped_rows: list = field(default_factory=list)
+    food_usage_counted: bool = True
 
 
 def _append(lines, spec):
@@ -124,6 +125,7 @@ def compute_daily_pnl(pnl):
         if item.theoretical_qty
     ]
     unmapped_rows = [{"item_name": dish.item_name, "qty": dish.qty, "amount": dish.amount} for dish in usage.unmapped]
+    food_usage_counted = usage.counted or food == 0
 
     lines: list[LineSpec] = []
     _append(lines, LineSpec(DailyPnLLine.GROSS_SALES, "Gross sales", food, drinks, gross))
@@ -309,6 +311,7 @@ def compute_daily_pnl(pnl):
         consumption_rows=consumption_rows,
         theoretical_rows=theoretical_rows,
         unmapped_rows=unmapped_rows,
+        food_usage_counted=food_usage_counted,
     )
 
 
@@ -361,6 +364,7 @@ def submit_daily_pnl(pnl, actor=None):
         setattr(locked, name, value)
     locked.electricity_rate = config.electricity_rate
     locked.period_start, locked.period_end = business_day_window(locked.business_date, config.business_day_start_hour)
+    locked.food_usage_counted = computation.food_usage_counted
     locked.status = DailyPnL.SUBMITTED
     locked.submitted_at = timezone.now()
     locked.submitted_by = actor
