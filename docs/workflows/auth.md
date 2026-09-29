@@ -4,7 +4,7 @@
 
 `AUTH_USER_MODEL` is `users.CustomUser`. django-allauth provides `/accounts/login/`, signup, logout, and related routes. `CustomLoginForm` and `CustomSignupForm` only adjust help text. Email verification defaults to `none`; if enabled, `email_confirmed` sets the confirmed address primary.
 
-`django.contrib.auth.middleware.LoginRequiredMiddleware` is installed, so every view requires login unless it opts out with `@login_not_required`. The only opt-out in project code is `web.views.home`; allauth's own login/signup views opt themselves out.
+`django.contrib.auth.middleware.LoginRequiredMiddleware` is installed, so every view requires login unless it opts out with `@login_not_required`. The only opt-out in project code is `web.views.home`, which routes authenticated users by role and redirects signed-out visitors to the sign-in page; allauth's own login/signup views opt themselves out.
 
 ## Roles
 

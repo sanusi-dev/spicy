@@ -13,7 +13,7 @@
 | `apps.orders` | orders, order lines/payments, KOT/BOT snapshots, POS orchestration | `models.py`, `services.py`, `views_pos.py`, `views.py` | inventory, menu, payments, settings, staff, users, accounting (order GL) |
 | `apps.accounting` | chart of accounts, GL entries, journal entries, fiscal years, supplier payables | `models.py`, `services.py`, `views.py` | orders, payments, settings, inventory (read-side) |
 | `apps.reports` | Daily P&L snapshot, P&L settings, sales reports, POS register, GL/trial balance/simple P&L | `models.py`, `services.py`, `views.py`, `sales_reports.py`, `sales_breakdown_reports.py`, `accounting_reports.py` | orders, inventory, staff, accounting (fiscal year), settings |
-| `apps.web` | landing, role redirect, shared middleware/context/template tags | `views.py`, `middleware.py`, `context_processors.py` | users, inventory navigation |
+| `apps.web` | role routing, public auth shell, shared middleware/context/template tags | `views.py`, `middleware.py`, `context_processors.py` | users, inventory navigation |
 | `apps.utils` | timestamp base model and styled forms | `models.py`, `forms.py` | Django only |
 
 ## Implementation Index by App
@@ -99,7 +99,7 @@
 
 ### `apps.web`
 
-- URLs: `web/urls.py` exposes landing, role redirect, backoffice dashboard, pending approval, and the shadowed `web:pos_index` route.
+- URLs: `web/urls.py` exposes the root role-routing view (signed-out visitors redirect to sign-in), backoffice dashboard, pending approval, and the shadowed `web:pos_index` route.
 - Views/utilities: `web/views.py`, `middleware.py`, `context_processors.py`, `meta.py`, and template tags under `web/templatetags/`.
 - Services/forms/signals: no business service or model form; middleware and context processors are the cross-cutting layer.
 - Templates/frontend: `templates/web/*`, `templates/web/app/app_base.html`, and global `site.js` imports.
