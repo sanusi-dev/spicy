@@ -62,6 +62,10 @@ class TestRoleBasedRedirects(TestViewBase):
         response = self._login_and_follow_redirect(user)
         self.assertRedirects(response, reverse("web:pending_approval"))
 
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get(reverse("web:home"))
+        self.assertRedirects(response, reverse("account_login"), fetch_redirect_response=False)
+
 
 class TestPendingApprovalView(TestViewBase):
     @classmethod

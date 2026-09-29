@@ -5,7 +5,7 @@
 @import '@fontsource/inter/800.css';
 
 @import './app/tailwind/app-components.css';
-@import './app/landing.css';
+@import './app/public.css';
 
 @config "../../tailwind.config.js";
 

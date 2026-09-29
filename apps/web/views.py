@@ -6,13 +6,14 @@ from apps.users.decorators import backoffice_required, staff_required
 
 @login_not_required
 def home(request):
+    """Route users by role; signed-out visitors land on the sign-in page."""
     if request.user.is_authenticated:
         if request.user.has_backoffice_access:
             return redirect("web:dashboard")
         if request.user.has_staff_role:
             return redirect("web:pos_index")
         return redirect("web:pending_approval")
-    return render(request, "web/landing.html")
+    return redirect("account_login")
 
 
 @backoffice_required
