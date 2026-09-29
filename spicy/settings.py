@@ -277,7 +277,7 @@ PROJECT_METADATA = {
         "enter all orders and payments; waiters use physical dockets and do not "
         "access the system."
     ),
-    "IMAGE": "https://upload.wikimedia.org/wikipedia/commons/2/20/PEO-pegasus_black.svg",
+    "IMAGE": "images/brand/og-image.png",
     "KEYWORDS": "SaaS, django",
 }
 

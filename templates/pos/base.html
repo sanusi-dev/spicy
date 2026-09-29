@@ -1,8 +1,11 @@
 {% extends "web/base.html" %}
+{% load static %}
 {% block body_wrapper %}
 <div class="h-screen flex flex-col bg-slate-100 overflow-hidden" x-data="{}" @keydown.window="if (($event.ctrlKey || $event.metaKey) && $event.key === 'k') { $event.preventDefault(); $refs.catalogSearch?.focus(); }" hx-on::response-error="document.getElementById('htmx-error').classList.remove('hidden')" hx-on::send-error="document.getElementById('htmx-error').classList.remove('hidden')" hx-on::after-request="if (event.detail.xhr.status > 0 && event.detail.xhr.status < 400) document.getElementById('htmx-error').classList.add('hidden')">
   <header class="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 shadow-sm shrink-0">
-    <a href="{% url 'pos:pos_home' %}" hx-get="{% url 'pos:pos_home' %}" hx-target="#pos-main" hx-swap="innerHTML" hx-push-url="true" class="shrink-0 font-extrabold text-slate-900 text-lg tracking-tight">{{ project_meta.NAME }}</a>
+    <a href="{% url 'pos:pos_home' %}" hx-get="{% url 'pos:pos_home' %}" hx-target="#pos-main" hx-swap="innerHTML" hx-push-url="true" aria-label="Spicy POS" class="shrink-0 transition-opacity hover:opacity-80">
+      <img src="{% static 'images/brand/logo.svg' %}" alt="Spicy" class="h-7 w-auto">
+    </a>
     {% include "pos/partials/shell_navigation.html" with nav_location="header" %}
     <div class="relative" x-data="{ open: false }" @keydown.escape.window="open = false">
       <button type="button" @click="open = !open" :aria-expanded="open" class="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600/30">

@@ -5,6 +5,9 @@
 {% block body %}
 <div class="flex-grow max-w-5xl mx-auto w-full px-8 relative z-10 flex flex-col items-center justify-center">
   <div class="glass-card p-10 rounded-3xl w-full max-w-md shadow-2xl">
+    <div class="mb-6 flex justify-center">
+      <img src="{% static 'images/brand/logo.svg' %}" alt="Spicy" class="h-10 w-auto">
+    </div>
     <h2 class="text-3xl font-bold text-gray-900 mb-10 text-center">Create Account</h2>
     <form method="post" class="space-y-5">
       {% csrf_token %}
