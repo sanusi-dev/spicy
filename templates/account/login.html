@@ -11,12 +11,19 @@
     </div>
     <h2 class="text-3xl font-bold text-gray-900 mb-2 text-center">Welcome Back</h2>
     <p class="text-gray-500 text-center mb-8">Enter your credentials to access Spicy</p>
-    <form method="post" class="space-y-5">
+    <form method="post" class="space-y-5" x-data="{ signingIn: false }" @submit="signingIn = true">
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% render_field form.login %}
       {% render_field form.password %}
-      <button type="submit" class="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-orange-500 transition-colors shadow-lg">Sign In to Spicy</button>
+      <button type="submit" :disabled="signingIn" class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-900 py-3.5 font-bold text-white shadow-lg transition-colors hover:bg-orange-500 disabled:cursor-wait disabled:opacity-70">
+        <svg class="h-4 w-4 animate-spin" x-show="signingIn" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        <span x-show="!signingIn">Sign In to Spicy</span>
+        <span x-show="signingIn" x-cloak>Signing in&hellip;</span>
+      </button>
     </form>
     <p class="mt-6 text-center text-sm text-gray-600">
       Don't have an account? <a href="{% url 'account_signup' %}" class="text-orange-500 font-bold hover:underline">Get Started</a>

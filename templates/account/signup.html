@@ -9,14 +9,21 @@
       <img src="{% static 'images/brand/logo.svg' %}" alt="Spicy" class="h-10 w-auto">
     </div>
     <h2 class="text-3xl font-bold text-gray-900 mb-10 text-center">Create Account</h2>
-    <form method="post" class="space-y-5">
+    <form method="post" class="space-y-5" x-data="{ signingUp: false }" @submit="signingUp = true">
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% render_field form.username %}
       {% render_field form.password1 %}
       {% render_field form.password2 %}
       <div class="relative overflow-hidden">{% render_field form.phone_number_x %}</div>
-      <button type="submit" class="w-full bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-colors shadow-lg">Register</button>
+      <button type="submit" :disabled="signingUp" class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white shadow-lg transition-colors hover:bg-orange-600 disabled:cursor-wait disabled:opacity-70">
+        <svg class="h-4 w-4 animate-spin" x-show="signingUp" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        <span x-show="!signingUp">Register</span>
+        <span x-show="signingUp" x-cloak>Creating account&hellip;</span>
+      </button>
     </form>
     <p class="mt-6 text-center text-sm text-gray-600">
       Already have an account? <a href="{% url 'account_login' %}" class="text-gray-900 font-bold hover:underline">Sign In</a>
