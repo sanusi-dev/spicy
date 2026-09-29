@@ -27,19 +27,4 @@
 <main class="flex-grow flex flex-col">
   {% block body %}{% endblock %}
 </main>
-{% block public_footer %}
-<footer class="w-full bg-white border-t border-gray-100 mt-auto relative z-10">
-  <div class="max-w-5xl mx-auto px-8 py-10 flex flex-col md:flex-row justify-between items-center gap-6">
-    <a href="{% url 'web:home' %}" aria-label="Spicy home" class="hover:opacity-80 transition-opacity">
-      <img src="{% static 'images/brand/logo.svg' %}" alt="Spicy" class="h-5 w-auto">
-    </a>
-    <p class="text-center text-sm text-gray-500">
-      © {% now "Y" %} Spicy System.
-      <span class="mx-1 text-gray-300">&#183;</span>
-      Engineered with precision by
-      <a href="https://akorede.dev" target="_blank" rel="noopener noreferrer" class="text-gray-900 font-black tracking-wide hover:text-orange-500 transition-colors">techwithbreezy</a>
-    </p>
-  </div>
-</footer>
-{% endblock public_footer %}
 {% endblock %}
