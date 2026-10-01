@@ -6,6 +6,30 @@ Spicy is a lightweight web-based POS for restaurant order management. Cashiers e
 
 The reverse-engineered, living technical documentation for the entire project is indexed at [`docs/README.md`](docs/README.md). Start there for architecture, cross-app dependencies, POS execution flows, database behavior, and troubleshooting guidance.
 
+## Landing page
+
+The marketing site lives in its own repo — **[sanusi-dev/spicy-landing](https://github.com/sanusi-dev/spicy-landing)** — and deploys to Netlify independently. It is plain HTML/CSS/JS with no build step and no runtime dependency on this codebase.
+
+The coupling is on **content, not code**: the landing page must stay true to
+[`FEATURES.md`](FEATURES.md). When a feature ships, is deferred or changes
+behaviour, update the landing page in the same breath. The claims it makes that
+are easiest to get out of sync:
+
+| Landing page says | Backed by |
+|---|---|
+| Cashiers take every order and payment; waiters use paper dockets | Scope, `FEATURES.md` |
+| Food and drinks tracked and reported apart | §C Departmental split |
+| Shift opens with a float, closes against a counted drawer | §A5 Shift management |
+| Stock values itself at weighted-average cost | §A3, feature 14 |
+| Recipe cards compared against actual kitchen usage | §A3, feature 16b |
+| Daily P&L splits food, drinks and total | §A10, feature 62 |
+| Three staff roles: admin, manager, cashier | §A1, feature 3 |
+| "Local or Cloud. Your Choice." | §D Architecture constraints |
+
+Do **not** advertise these as shipped — they are Planned or Deferred in
+`FEATURES.md`: the local print agent (printer config exists, the agent does
+not), customer master / loyalty, discounts and coupons, and multi-branch.
+
 ## Quickstart
 
 ### Prerequisites
