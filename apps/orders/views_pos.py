@@ -858,20 +858,21 @@ def pos_order_update_meta(request: HttpRequest, pk: int) -> HttpResponse:
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
-    order = get_object_or_404(
-        Order.objects.select_for_update().open_drafts_for(shift, request.user),
-        pk=pk,
-    )
-    try:
-        guest_count = services.update_order_meta(
-            order,
-            order_type=request.POST.get("order_type"),
-            guest_delta=request.POST.get("guest_delta"),
-            guest_count=request.POST.get("guest_count"),
-            actor=request.user,
+    with transaction.atomic():
+        order = get_object_or_404(
+            Order.objects.select_for_update().open_drafts_for(shift, request.user),
+            pk=pk,
         )
-    except ValidationError as e:
-        return _render_cart(request, order, error=e.messages[0] if e.messages else "Cannot update the order.")
+        try:
+            guest_count = services.update_order_meta(
+                order,
+                order_type=request.POST.get("order_type"),
+                guest_delta=request.POST.get("guest_delta"),
+                guest_count=request.POST.get("guest_count"),
+                actor=request.user,
+            )
+        except ValidationError as e:
+            return _render_cart(request, order, error=e.messages[0] if e.messages else "Cannot update the order.")
     active = _get_active_card(request, order)
     if active > guest_count:
         cards = request.session.get(SESSION_CARD_KEY, {})
@@ -1007,20 +1008,21 @@ def pos_order_update_item(request: HttpRequest, pk: int, item_pk: int) -> HttpRe
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
-    order = get_object_or_404(
-        Order.objects.select_for_update().open_drafts_for(shift, request.user),
-        pk=pk,
-    )
-    try:
-        services.update_order_item(
-            order,
-            item_pk,
-            action=request.POST.get("action", "update"),
-            qty=request.POST.get("qty"),
-            actor=request.user,
+    with transaction.atomic():
+        order = get_object_or_404(
+            Order.objects.select_for_update().open_drafts_for(shift, request.user),
+            pk=pk,
         )
-    except ValidationError as e:
-        return _render_cart(request, order, error=e.messages[0] if e.messages else "Invalid item update.")
+        try:
+            services.update_order_item(
+                order,
+                item_pk,
+                action=request.POST.get("action", "update"),
+                qty=request.POST.get("qty"),
+                actor=request.user,
+            )
+        except ValidationError as e:
+            return _render_cart(request, order, error=e.messages[0] if e.messages else "Invalid item update.")
     return _render_cart(request, order, catalog_oob=True)
 
 
