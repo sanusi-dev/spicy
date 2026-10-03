@@ -680,7 +680,6 @@ template without `{% load %}`:
 - Only make changes that are requested or confidently understood as related to the request.
 - When fixing an issue, exhaust the existing implementation before introducing a new pattern/technology. If you do introduce new, remove the old so there's no duplicate logic.
 - Avoid scripts in files if the script is likely only run once.
-- Avoid files over 200-300 lines — refactor at that point.
 - Never add mock data to functions. Mocks only in tests or test-only utilities.
 - Never overwrite `.env` without first asking and confirming.
 
