@@ -178,3 +178,17 @@ class TestStaffManagementViews(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "cashier@test.com")
         self.assertNotContains(response, "newbie@test.com")
+
+    def test_staff_confirm_message_keeps_display_name_as_text(self):
+        payload = '<img src=x onerror=alert(1)>'
+        self.cashier.first_name = payload
+        self.cashier.last_name = ""
+        self.cashier.save()
+        self.cashier.groups.add(self.cashier_group)
+
+        response = self.client.get(reverse("settings:staff_list"))
+
+        self.assertContains(response, "&lt;img src=x onerror=alert(1)&gt;")
+        self.assertNotContains(response, payload)
+        self.assertNotContains(response, "<strong>")
+        self.assertContains(response, "from Cashier to Manager?")

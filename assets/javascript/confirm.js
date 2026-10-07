@@ -13,9 +13,10 @@ function confirmButtonText(element) {
 }
 
 function showConfirm(element) {
+  // titleText/text create text nodes. data-confirm-* can include names and item labels.
   return Swal.fire({
-    title: confirmTitle(element),
-    html: confirmMessage(element),
+    titleText: confirmTitle(element),
+    text: confirmMessage(element),
     icon: element.dataset.confirmIcon || 'question',
     showCancelButton: true,
     confirmButtonColor: element.dataset.confirmColor || undefined,

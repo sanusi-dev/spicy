@@ -17,7 +17,7 @@ function showMessage(message, level) {
     timer: 3500,
     timerProgressBar: true,
     icon: iconMap[level] || undefined,
-    title: message,
+    titleText: message,
   });
 }
 

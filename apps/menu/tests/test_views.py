@@ -56,6 +56,17 @@ class TestMenuViews(MenuViewTestBase):
         self.assertNotContains(response, "Catalog control")
         self.assertNotContains(response, "Live on POS")
 
+    def test_menu_detail_confirm_message_keeps_item_name_as_text(self):
+        payload = '<img src=x onerror=alert(1)>'
+        self.menu_item.item_name = payload
+        self.menu_item.save(update_fields=["item_name"])
+
+        response = self.client.get(reverse("menu:menu_detail", kwargs={"pk": self.menu.pk}))
+
+        self.assertContains(response, "&lt;img src=x onerror=alert(1)&gt;")
+        self.assertNotContains(response, payload)
+        self.assertContains(response, 'data-confirm-message="Remove')
+
 
 class TestItemAddOnViews(MenuViewTestBase):
     def test_add_on_list_shows_active_menu_price(self):
