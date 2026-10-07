@@ -35,6 +35,8 @@ class SubmittedDocumentAdminMixin:
         readonly = list(super().get_readonly_fields(request, obj))
         if self._is_immutable(obj):
             return [field.name for field in self.model._meta.fields]
+        if "status" not in readonly:
+            readonly.append("status")
         return readonly
 
     def has_delete_permission(self, request, obj=None):

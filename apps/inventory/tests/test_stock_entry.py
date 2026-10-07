@@ -291,3 +291,67 @@ class StockEntryTest(TestCase):
             set(history.values_list("voucher_type", flat=True)),
             {"Stock Entry", "Stock Entry Cancellation"},
         )
+
+    def test_cancel_transfer_uses_snapshot_after_warehouse_reassigned(self):
+        StockLedgerEntry.create_entry(
+            item=self.food,
+            warehouse=self.store,
+            quantity=Decimal("5"),
+            voucher_type="Opening",
+            voucher_no="W1",
+            unit_rate=Decimal("100"),
+        )
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
+        StockEntryDetail.objects.create(stock_entry=entry, item=self.food, qty=Decimal("2"))
+        submit_stock_entry(entry)
+
+        new_kitchen = Warehouse.objects.create(name="Kitchen 2", account=self.accounts["stock_in_hand"])
+        food_unit = ProductionUnit.objects.get(department="FOOD")
+        food_unit.warehouse = new_kitchen
+        food_unit.save(update_fields=["warehouse", "updated_at"])
+
+        cancel_stock_entry(entry)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "CANCELLED")
+        self.assertEqual(Bin.objects.get(item=self.food, warehouse=self.kitchen).actual_qty, Decimal("0"))
+        self.assertEqual(Bin.objects.get(item=self.food, warehouse=self.store).actual_qty, Decimal("5"))
+        self.assertFalse(Bin.objects.filter(item=self.food, warehouse=new_kitchen).exists())
+
+    def test_cancel_transfer_raises_when_destination_bin_deleted(self):
+        StockLedgerEntry.create_entry(
+            item=self.food,
+            warehouse=self.store,
+            quantity=Decimal("5"),
+            voucher_type="Opening",
+            voucher_no="B1",
+            unit_rate=Decimal("100"),
+        )
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
+        StockEntryDetail.objects.create(stock_entry=entry, item=self.food, qty=Decimal("2"))
+        submit_stock_entry(entry)
+        Bin.objects.filter(item=self.food, warehouse=self.kitchen).delete()
+
+        with self.assertRaisesMessage(ValidationError, "stock records"):
+            cancel_stock_entry(entry)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "SUBMITTED")
+        self.assertFalse(StockLedgerEntry.objects.filter(voucher_type="Stock Entry Cancellation").exists())
+
+    def test_cancel_transfer_raises_when_original_sle_pair_missing(self):
+        StockLedgerEntry.create_entry(
+            item=self.food,
+            warehouse=self.store,
+            quantity=Decimal("5"),
+            voucher_type="Opening",
+            voucher_no="S1",
+            unit_rate=Decimal("100"),
+        )
+        entry = StockEntry.objects.create(purpose="MATERIAL_TRANSFER")
+        StockEntryDetail.objects.create(stock_entry=entry, item=self.food, qty=Decimal("2"))
+        submit_stock_entry(entry)
+        StockLedgerEntry.objects.filter(voucher_type="Stock Entry", voucher_no=str(entry.pk)).delete()
+
+        with self.assertRaisesMessage(ValidationError, "original stock movements"):
+            cancel_stock_entry(entry)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "SUBMITTED")

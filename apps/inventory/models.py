@@ -22,6 +22,33 @@ def _assert_document_is_draft(document, *, action="modify"):
         raise ValidationError(f"Cannot {action} a {status.lower()} inventory document.")
 
 
+def _guard_inventory_document_save(document):
+    """Status changes only through submit/cancel services; new rows must start as DRAFT."""
+    allow_submit = getattr(document, "_allow_submit", False)
+    allow_cancel = getattr(document, "_allow_cancel", False)
+    if document.pk:
+        previous = type(document).objects.only("status").get(pk=document.pk)
+        if previous.status != "DRAFT" and not allow_cancel:
+            raise ValidationError(f"Cannot modify a {previous.status.lower()} inventory document.")
+    if document.status != "DRAFT" and not (allow_submit or allow_cancel):
+        raise ValidationError("Use the submit or cancel service to change this document's status.")
+
+
+def persist_inventory_lifecycle(document, *, submit=False, cancel=False, update_fields):
+    """Save a submit or cancel status change with the matching private flag."""
+    if submit:
+        document._allow_submit = True
+    if cancel:
+        document._allow_cancel = True
+    try:
+        document.save(update_fields=update_fields)
+    finally:
+        if submit:
+            del document._allow_submit
+        if cancel:
+            del document._allow_cancel
+
+
 class UOM(BaseModel):
     """Unit of measure (e.g. Nos, Kg, Litre, Box)."""
 
@@ -289,8 +316,29 @@ class Bin(BaseModel):
         return bin_obj
 
 
+class StockLedgerEntryManager(models.Manager):
+    """Block unguarded inserts so Bin and the ledger stay in step."""
+
+    def create(self, **kwargs):
+        raise ValidationError("Use StockLedgerEntry.create_entry() to post stock movements.")
+
+    def bulk_create(self, *args, **kwargs):
+        raise ValidationError("Use StockLedgerEntry.create_entry() to post stock movements.")
+
+    def _insert(self, **kwargs):
+        obj = self.model(**kwargs)
+        obj._allow_create = True
+        try:
+            obj.save()
+        finally:
+            del obj._allow_create
+        return obj
+
+
 class StockLedgerEntry(BaseModel):
     """An immutable record of a single stock movement for one item in one warehouse."""
+
+    objects = StockLedgerEntryManager()
 
     VARIANCE_CHOICES = [
         ("CANCELLATION_WAC", "Cancellation WAC"),
@@ -340,6 +388,8 @@ class StockLedgerEntry(BaseModel):
     def save(self, *args, **kwargs):
         if self.pk:
             raise ValidationError("Stock ledger entries are immutable; post a reversal instead.")
+        if not getattr(self, "_allow_create", False):
+            raise ValidationError("Use StockLedgerEntry.create_entry() to post stock movements.")
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -460,7 +510,7 @@ class StockLedgerEntry(BaseModel):
         else:
             raise ValidationError("Quantity cannot be zero.")
 
-        sle = cls.objects.create(
+        sle = cls.objects._insert(
             item=item,
             warehouse=warehouse,
             quantity=quantity,
@@ -513,16 +563,7 @@ class StockEntry(BaseModel):
         return f"{self.purpose} - {self.posting_date}"
 
     def save(self, *args, **kwargs):
-        if self.pk:
-            previous = type(self).objects.only("status").get(pk=self.pk)
-            if previous.status != "DRAFT" and self.status == previous.status:
-                raise ValidationError(f"Cannot modify a {previous.status.lower()} stock entry.")
-            if previous.status != "DRAFT" and self.status not in {"SUBMITTED", "CANCELLED"}:
-                raise ValidationError(f"Cannot modify a {previous.status.lower()} stock entry.")
-            if previous.status == "SUBMITTED" and self.status not in {"SUBMITTED", "CANCELLED"}:
-                raise ValidationError("Submitted stock entries can only be cancelled.")
-            if previous.status == "CANCELLED" and self.status != "CANCELLED":
-                raise ValidationError("Cancelled stock entries cannot be modified.")
+        _guard_inventory_document_save(self)
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -738,14 +779,7 @@ class StockReconciliation(BaseModel):
         return f"{self.get_reason_display()} - {self.warehouse.name} - {self.posting_date}"
 
     def save(self, *args, **kwargs):
-        if self.pk:
-            previous = type(self).objects.only("status").get(pk=self.pk)
-            if previous.status != "DRAFT" and self.status == previous.status:
-                raise ValidationError(f"Cannot modify a {previous.status.lower()} stock reconciliation.")
-            if previous.status == "SUBMITTED" and self.status not in {"SUBMITTED", "CANCELLED"}:
-                raise ValidationError("Submitted reconciliations can only be cancelled.")
-            if previous.status == "CANCELLED" and self.status != "CANCELLED":
-                raise ValidationError("Cancelled reconciliations cannot be modified.")
+        _guard_inventory_document_save(self)
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -826,14 +860,7 @@ class PurchaseReceipt(BaseModel):
         return f"#{self.id} - {self.supplier_name} - {self.posting_date}"
 
     def save(self, *args, **kwargs):
-        if self.pk:
-            previous = type(self).objects.only("status").get(pk=self.pk)
-            if previous.status != "DRAFT" and self.status == previous.status:
-                raise ValidationError(f"Cannot modify a {previous.status.lower()} purchase receipt.")
-            if previous.status == "SUBMITTED" and self.status not in {"SUBMITTED", "CANCELLED"}:
-                raise ValidationError("Submitted purchase receipts can only be cancelled.")
-            if previous.status == "CANCELLED" and self.status != "CANCELLED":
-                raise ValidationError("Cancelled purchase receipts cannot be modified.")
+        _guard_inventory_document_save(self)
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

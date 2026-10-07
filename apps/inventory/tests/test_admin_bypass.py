@@ -2,7 +2,7 @@ from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory, TestCase, override_settings
 
 from apps.inventory.admin import StockEntryAdmin
-from apps.inventory.models import StockEntry
+from apps.inventory.models import StockEntry, persist_inventory_lifecycle
 from apps.users.models import CustomUser
 from apps.utils.admin import dev_admin_bypass
 
@@ -16,7 +16,7 @@ class DevAdminBypassTest(TestCase):
         self.staff = CustomUser.objects.create_user(username="clerk", password="testpass123", is_staff=True)
         self.entry = StockEntry.objects.create(purpose="MATERIAL_RECEIPT")
         self.entry.status = "SUBMITTED"
-        self.entry.save(update_fields=["status", "updated_at"])
+        persist_inventory_lifecycle(self.entry, submit=True, update_fields=["status", "updated_at"])
         self.admin = StockEntryAdmin(StockEntry, AdminSite())
 
     def _request(self, user):
@@ -38,6 +38,12 @@ class DevAdminBypassTest(TestCase):
         self.assertFalse(dev_admin_bypass(request))
         self.assertFalse(self.admin.has_change_permission(request, self.entry))
         self.assertFalse(self.admin.has_delete_permission(request, self.entry))
+
+    @override_settings(SPICY_DEV_ADMIN_BYPASS=False)
+    def test_draft_status_is_readonly(self):
+        draft = StockEntry.objects.create(purpose="MATERIAL_RECEIPT")
+        request = self._request(self.superuser)
+        self.assertIn("status", self.admin.get_readonly_fields(request, draft))
 
     @override_settings(SPICY_DEV_ADMIN_BYPASS=False)
     def test_superuser_stays_locked_when_bypass_off(self):

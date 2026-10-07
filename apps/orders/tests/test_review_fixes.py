@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.inventory.models import UOM, Item, ItemGroup, StockEntry, Warehouse
+from apps.inventory.models import UOM, Item, ItemGroup, StockEntry, Warehouse, persist_inventory_lifecycle
 from apps.menu.models import Menu, MenuItem
 from apps.orders.management.commands.seed_pos_setup import Command as SeedPosSetup
 from apps.orders.models import DRAFT, KOT_CANCELLED, KOT_PRINT_PENDING, KOT_PRINTED, Order
@@ -194,7 +194,7 @@ class InventorySubmittedImmutableTest(ReviewFixBase):
     def test_submitted_stock_entry_cannot_be_edited(self):
         entry = StockEntry.objects.create(purpose="MATERIAL_RECEIPT", status="DRAFT")
         entry.status = "SUBMITTED"
-        entry.save(update_fields=["status"])
+        persist_inventory_lifecycle(entry, submit=True, update_fields=["status"])
         entry.remarks = "tamper"
         with self.assertRaises(ValidationError):
             entry.save()

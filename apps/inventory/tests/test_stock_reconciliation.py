@@ -193,6 +193,42 @@ class StockReconciliationStandardizationTest(TestCase):
         self.assertEqual(reversal_gl.posting_date, timezone.localdate())
         self.assertEqual(reversal_sle.posting_date, timezone.localdate())
 
+    def test_adjustment_cancel_posts_wac_drift_to_variance(self):
+        StockLedgerEntry.create_entry(self.rice, self.store, Decimal("10"), "Receipt", "A7", unit_rate=Decimal("100"))
+        rec = self.make_rec("ADJUSTMENT", warehouse=self.store)
+        StockReconciliationItem.objects.create(reconciliation=rec, item=self.rice, qty=Decimal("6"))
+        submit_stock_reconciliation(rec)
+        StockLedgerEntry.create_entry(
+            item=self.rice,
+            warehouse=self.store,
+            quantity=Decimal("4"),
+            voucher_type="Later Receipt",
+            voucher_no="A8",
+            unit_rate=Decimal("200"),
+        )
+        self.assertEqual(Bin.objects.get(item=self.rice, warehouse=self.store).valuation_rate, Decimal("140"))
+
+        cancel_stock_reconciliation(rec)
+
+        reversal = StockLedgerEntry.objects.get(
+            voucher_type="Stock Reconciliation Cancellation", voucher_no=str(rec.pk)
+        )
+        self.assertEqual(reversal.quantity, Decimal("4"))
+        self.assertEqual(reversal.unit_rate, Decimal("140"))
+        self.assertEqual(reversal.variance_type, "CANCELLATION_WAC")
+        self.assertEqual(reversal.variance_amount, Decimal("-160"))
+        stock_bin = Bin.objects.get(item=self.rice, warehouse=self.store)
+        self.assertEqual(stock_bin.actual_qty, Decimal("14"))
+        self.assertEqual(stock_bin.valuation_rate, Decimal("140"))
+        reversal_gl = GLEntry.objects.filter(
+            voucher_type="Stock Reconciliation", voucher_no=str(rec.pk), is_cancelled=False
+        )
+        self.assertEqual(reversal_gl.filter(account=self.accounts["stock_in_hand"], debit=Decimal("560")).count(), 1)
+        self.assertEqual(
+            reversal_gl.filter(account=self.accounts["stock_adjustment"], credit=Decimal("400")).count(), 1
+        )
+        self.assertEqual(reversal_gl.filter(account=self.accounts["variance"], credit=Decimal("160")).count(), 1)
+
     # Consumption
 
     def test_consumption_posts_dr_expense_cr_kitchen(self):

@@ -20,6 +20,7 @@ from .models import (
     StockEntryDetail,
     StockLedgerEntry,
     StockReconciliation,
+    persist_inventory_lifecycle,
 )
 
 
@@ -264,6 +265,98 @@ def _resolve_account(account, label):
     return account
 
 
+def _reverse_sles_at_current_wac(*, sles, locked_bins, voucher_type, voucher_no):
+    """Reverse each SLE at current WAC and stamp CANCELLATION_WAC drift. Returns pre-cancel WAC by SLE pk."""
+    pre_wac_map = {}
+    for sle in sles:
+        bin_obj = locked_bins[(sle.item_id, sle.warehouse_id)]
+        pre_wac = bin_obj.valuation_rate or Decimal("0")
+        pre_wac_map[sle.pk] = pre_wac
+        variance = sle.quantity * (pre_wac - sle.unit_rate)
+        variance_type = "CANCELLATION_WAC" if variance != 0 else ""
+        StockLedgerEntry._create_entry_locked(
+            item=sle.item,
+            warehouse=sle.warehouse,
+            quantity=-sle.quantity,
+            voucher_type=voucher_type,
+            voucher_no=voucher_no,
+            unit_rate=None,
+            voucher_detail_no=sle.voucher_detail_no,
+            posting_date=timezone.localdate(),
+            variance_amount=variance,
+            variance_type=variance_type,
+            reversal_of_sle_id=sle.pk,
+            bin_obj=bin_obj,
+        )
+    return pre_wac_map
+
+
+def _cancellation_wac_gl_rows(*, sles, pre_wac_map, counter_account, variance_account):
+    """SIH at today's value, counter-account at the original booked value, drift to variance."""
+    rows = []
+    variance_acct = None
+    for sle in sles:
+        pre_wac = pre_wac_map[sle.pk]
+        curr_value = money(abs(sle.quantity) * pre_wac)
+        orig_value = money(abs(sle.stock_value_change))
+        sih_acct = _resolve_account(sle.warehouse.account, "The warehouse account")
+        diff = curr_value - orig_value
+        if sle.quantity > 0:
+            if curr_value:
+                rows.append({"account": sih_acct, "credit": curr_value})
+            if orig_value:
+                rows.append({"account": counter_account, "debit": orig_value})
+            if diff > 0:
+                if variance_acct is None:
+                    variance_acct = _resolve_account(variance_account, "The inventory price variance account")
+                rows.append({"account": variance_acct, "debit": diff})
+            elif diff < 0:
+                if variance_acct is None:
+                    variance_acct = _resolve_account(variance_account, "The inventory price variance account")
+                rows.append({"account": variance_acct, "credit": -diff})
+        else:
+            if curr_value:
+                rows.append({"account": sih_acct, "debit": curr_value})
+            if orig_value:
+                rows.append({"account": counter_account, "credit": orig_value})
+            if diff > 0:
+                if variance_acct is None:
+                    variance_acct = _resolve_account(variance_account, "The inventory price variance account")
+                rows.append({"account": variance_acct, "credit": diff})
+            elif diff < 0:
+                if variance_acct is None:
+                    variance_acct = _resolve_account(variance_account, "The inventory price variance account")
+                rows.append({"account": variance_acct, "debit": -diff})
+    return rows
+
+
+def _reconciliation_cancel_counter_account(locked):
+    """The non-SIH account that the original reconciliation posted against."""
+    from apps.settings.models import ProductionUnit, Restaurant
+
+    restaurant = Restaurant.load()
+    if locked.reason == "OPENING_STOCK":
+        return _resolve_account(
+            restaurant.temporary_opening_account if restaurant else None,
+            "The temporary opening account",
+        )
+    if locked.reason == "ADJUSTMENT":
+        return _resolve_account(
+            restaurant.stock_adjustment_account if restaurant else None,
+            "The stock adjustment account",
+        )
+    if locked.reason == "CONSUMPTION":
+        kitchen_unit = (
+            ProductionUnit.objects.select_related("expense_account").filter(department=ProductionUnit.FOOD).first()
+        )
+        unit_expense = kitchen_unit.expense_account if kitchen_unit is not None else None
+        return _resolve_account(
+            unit_expense or (restaurant.default_expense_account if restaurant else None),
+            "The kitchen expense account",
+        )
+    return _resolve_account(restaurant.wastage_account if restaurant else None, "The wastage account")
+
+
 def _post_gl_rows(posting_date, voucher_type, voucher_no, rows, remarks):
     """Merge rows per account and post them."""
 
@@ -454,8 +547,32 @@ def submit_stock_entry(entry):
             f"Stock Entry {voucher_no} {locked.purpose}",
         )
     locked.status = "SUBMITTED"
-    locked.save(update_fields=["status", "updated_at"])
+    persist_inventory_lifecycle(locked, submit=True, update_fields=["status", "updated_at"])
     entry.status = locked.status
+
+
+def _transfer_cancel_route(detail, original_sles):
+    """Return the snapshotted warehouses and original SLE pair for one transfer line."""
+    detail_no = str(detail.pk)
+    orig_store = next(
+        (sle for sle in original_sles if sle.quantity < 0 and sle.voucher_detail_no == detail_no),
+        None,
+    )
+    orig_dest = next(
+        (sle for sle in original_sles if sle.quantity > 0 and sle.voucher_detail_no == detail_no),
+        None,
+    )
+    source = detail.source_warehouse or (orig_store.warehouse if orig_store else None)
+    target = detail.target_warehouse or (orig_dest.warehouse if orig_dest else None)
+    if source is None or target is None:
+        raise ValidationError(
+            f"This transfer cannot be cancelled — the original warehouses for {detail.item.item_name} are missing."
+        )
+    if orig_store is None or orig_dest is None:
+        raise ValidationError(
+            f"This transfer cannot be cancelled — the original stock movements for {detail.item.item_name} are missing."
+        )
+    return source, target, orig_store, orig_dest
 
 
 @transaction.atomic
@@ -469,29 +586,21 @@ def cancel_stock_entry(entry):
         return
     voucher_no = str(locked.pk)
     original_sles = list(
-        StockLedgerEntry.objects.select_related("item", "warehouse", "item__item_group").filter(
+        StockLedgerEntry.objects.select_related("item", "warehouse", "warehouse__account", "item__item_group").filter(
             voucher_type="Stock Entry", voucher_no=voucher_no
         )
     )
     if locked.purpose == "MATERIAL_TRANSFER":
-        details = list(locked.items.select_related("item").all())
-        from apps.settings.models import ProductionUnit, Restaurant
+        details = list(locked.items.select_related("item", "source_warehouse", "target_warehouse").all())
+        from apps.settings.models import Restaurant
 
         restaurant = Restaurant.load()
-        targets = {}
-        if restaurant:
-            units = {u.department: u for u in ProductionUnit.objects.all()}
-            food_unit = units.get(ProductionUnit.FOOD)
-            if food_unit:
-                targets["FOOD"] = food_unit.warehouse
-            if restaurant.default_warehouse_id:
-                targets["DRINKS"] = restaurant.default_warehouse
-        bin_keys = set()
-        for d in details:
-            bin_keys.add((d.item_id, restaurant.store_warehouse_id))
-            tgt = targets.get(d.item.department)
-            if tgt:
-                bin_keys.add((d.item_id, tgt.pk if hasattr(tgt, "pk") else tgt))
+        routes = [(detail, *_transfer_cancel_route(detail, original_sles)) for detail in details]
+        bin_keys = {
+            (detail.item_id, warehouse.pk)
+            for detail, source, target, _orig_store, _orig_dest in routes
+            for warehouse in (source, target)
+        }
         locked_bins = {
             (b.item_id, b.warehouse_id): b
             for b in Bin.objects.select_for_update()
@@ -502,65 +611,46 @@ def cancel_stock_entry(entry):
             .order_by("item_id", "warehouse_id")
         }
         reversal_rows = []
-        for detail in details:
-            tgt = targets.get(detail.item.department)
-            if not tgt:
-                continue
-            tgt_id = tgt.pk if hasattr(tgt, "pk") else tgt
-            dest_bin = locked_bins.get((detail.item_id, tgt_id))
-            store_bin = locked_bins.get((detail.item_id, restaurant.store_warehouse_id))
+        for detail, source, target, orig_store, orig_dest in routes:
+            dest_bin = locked_bins.get((detail.item_id, target.pk))
+            store_bin = locked_bins.get((detail.item_id, source.pk))
             if not dest_bin or not store_bin:
-                continue
+                missing = []
+                if not store_bin:
+                    missing.append(source.name)
+                if not dest_bin:
+                    missing.append(target.name)
+                raise ValidationError(
+                    f"This transfer cannot be cancelled — stock records for {detail.item.item_name} "
+                    f"in {', '.join(missing)} are missing."
+                )
             if dest_bin.actual_qty < detail.qty:
                 used = detail.qty - dest_bin.actual_qty
                 raise ValidationError(
                     f"This transfer cannot be cancelled — {used} of {detail.qty} {detail.item.item_name} "
-                    f"have already been used from {tgt.name}. Transfer the remainder back or file an adjustment."
+                    f"have already been used from {target.name}. Transfer the remainder back or file an adjustment."
                 )
             dest_wac = dest_bin.valuation_rate or Decimal("0")
-            orig_dest = next(
-                (
-                    s
-                    for s in original_sles
-                    if s.warehouse_id == tgt_id and s.quantity > 0 and s.voucher_detail_no == str(detail.pk)
-                ),
-                None,
-            )
-            orig_store = next(
-                (
-                    s
-                    for s in original_sles
-                    if s.warehouse_id == restaurant.store_warehouse_id
-                    and s.quantity < 0
-                    and s.voucher_detail_no == str(detail.pk)
-                ),
-                None,
-            )
-            # Destination returns at current WAC; the drift vs the original transfer value posts as CANCELLATION_WAC.
             curr_value = money(detail.qty * dest_wac)
-            if orig_store is not None:
-                orig_value = money(abs(orig_store.stock_value_change))
-                unit_rate = orig_store.unit_rate
-            else:
-                orig_value = curr_value
-                unit_rate = dest_wac
+            orig_value = money(abs(orig_store.stock_value_change))
+            unit_rate = orig_store.unit_rate
             variance = curr_value - orig_value
             variance_type = "CANCELLATION_WAC" if variance else ""
             StockLedgerEntry._create_entry_locked(
                 item=detail.item,
-                warehouse=tgt,
+                warehouse=target,
                 quantity=-detail.qty,
                 voucher_type="Stock Entry Cancellation",
                 voucher_no=voucher_no,
                 unit_rate=None,
                 voucher_detail_no=str(detail.pk),
                 posting_date=timezone.localdate(),
-                reversal_of_sle_id=orig_dest.pk if orig_dest else None,
+                reversal_of_sle_id=orig_dest.pk,
                 bin_obj=dest_bin,
             )
             StockLedgerEntry._create_entry_locked(
                 item=detail.item,
-                warehouse=restaurant.store_warehouse,
+                warehouse=source,
                 quantity=detail.qty,
                 voucher_type="Stock Entry Cancellation",
                 voucher_no=voucher_no,
@@ -569,26 +659,25 @@ def cancel_stock_entry(entry):
                 posting_date=timezone.localdate(),
                 variance_amount=variance,
                 variance_type=variance_type,
-                reversal_of_sle_id=orig_store.pk if orig_store else None,
+                reversal_of_sle_id=orig_store.pk,
                 bin_obj=store_bin,
             )
-            # Drift between current and original value posts to the variance account.
-            if curr_value and restaurant.store_warehouse.account_id != tgt.account_id:
+            if curr_value and source.account_id != target.account_id:
                 reversal_rows.append(
                     {
-                        "account": _resolve_account(restaurant.store_warehouse.account, "The Store warehouse account"),
+                        "account": _resolve_account(source.account, "The Store warehouse account"),
                         "debit": orig_value,
                     }
                 )
                 reversal_rows.append(
                     {
-                        "account": _resolve_account(tgt.account, f"The {tgt.name} warehouse account"),
+                        "account": _resolve_account(target.account, f"The {target.name} warehouse account"),
                         "credit": curr_value,
                     }
                 )
                 if variance:
                     variance_acct = _resolve_account(
-                        restaurant.inventory_price_variance_account,
+                        restaurant.inventory_price_variance_account if restaurant else None,
                         "The inventory price variance account",
                     )
                     if variance > 0:
@@ -620,27 +709,12 @@ def cancel_stock_entry(entry):
                 )
                 .order_by("item_id", "warehouse_id")
             }
-            pre_wac_map = {}
-            for sle in sles:
-                bin_obj = locked_bins[(sle.item_id, sle.warehouse_id)]
-                pre_wac = bin_obj.valuation_rate or Decimal("0")
-                pre_wac_map[sle.pk] = pre_wac
-                variance = sle.quantity * (pre_wac - sle.unit_rate)
-                variance_type = "CANCELLATION_WAC" if variance != 0 else ""
-                StockLedgerEntry._create_entry_locked(
-                    item=sle.item,
-                    warehouse=sle.warehouse,
-                    quantity=-sle.quantity,
-                    voucher_type="Stock Entry Cancellation",
-                    voucher_no=voucher_no,
-                    unit_rate=None,
-                    voucher_detail_no=sle.voucher_detail_no,
-                    posting_date=timezone.localdate(),
-                    variance_amount=variance,
-                    variance_type=variance_type,
-                    reversal_of_sle_id=sle.pk,
-                    bin_obj=bin_obj,
-                )
+            pre_wac_map = _reverse_sles_at_current_wac(
+                sles=sles,
+                locked_bins=locked_bins,
+                voucher_type="Stock Entry Cancellation",
+                voucher_no=voucher_no,
+            )
             gl_originals = list(
                 GLEntry.objects.filter(voucher_type="Stock Entry", voucher_no=voucher_no, is_cancelled=False)
             )
@@ -653,41 +727,21 @@ def cancel_stock_entry(entry):
 
                 mode = ModeOfPayment.objects.get(pk=locked.mode_of_payment_id)
                 funding_acct = _resolve_payment_account(mode)
-                # SIH moves at the bin's current value; drift against the booked value goes to the variance account.
-                line_amounts = []
-                for sle in sles:
-                    pre_wac = pre_wac_map[sle.pk]
-                    curr_amount = money(sle.quantity * pre_wac)
-                    orig_amount = money(sle.stock_value_change)
-                    line_amounts.append((sle, curr_amount, orig_amount))
-                variance_acct = None
-                if any(curr != orig for _sle, curr, orig in line_amounts):
-                    variance_acct = _resolve_account(
-                        restaurant.inventory_price_variance_account if restaurant else None,
-                        "The inventory price variance account",
-                    )
-                new_rows = []
-                for sle, curr_amount, orig_amount in line_amounts:
-                    sih_acct = _resolve_account(sle.warehouse.account, "The warehouse account")
-                    new_rows.append({"account": sih_acct, "credit": curr_amount})
-                    new_rows.append({"account": funding_acct, "debit": orig_amount})
-                    diff = curr_amount - orig_amount
-                    if diff != 0:
-                        if variance_acct is None:
-                            raise ValidationError("The inventory price variance account is not configured.")
-                        if diff > 0:
-                            new_rows.append({"account": variance_acct, "debit": diff})
-                        else:
-                            new_rows.append({"account": variance_acct, "credit": -diff})
+                new_rows = _cancellation_wac_gl_rows(
+                    sles=sles,
+                    pre_wac_map=pre_wac_map,
+                    counter_account=funding_acct,
+                    variance_account=restaurant.inventory_price_variance_account if restaurant else None,
+                )
                 if new_rows:
                     _post_gl_rows(timezone.localdate(), "Stock Entry", voucher_no, new_rows, "Reversal")
             _revert_last_purchase_rates_for_stock_entry(locked, sles)
         locked.status = "CANCELLED"
-        locked.save(update_fields=["status", "updated_at"])
+        persist_inventory_lifecycle(locked, cancel=True, update_fields=["status", "updated_at"])
         entry.status = locked.status
         return
     locked.status = "CANCELLED"
-    locked.save(update_fields=["status", "updated_at"])
+    persist_inventory_lifecycle(locked, cancel=True, update_fields=["status", "updated_at"])
     entry.status = locked.status
 
 
@@ -870,7 +924,9 @@ def submit_stock_reconciliation(reconciliation, actor=None):
     locked.submitted_by = actor
     locked.submitted_at = timezone.now()
     locked.status = "SUBMITTED"
-    locked.save(update_fields=["status", "submitted_by", "submitted_at", "updated_at"])
+    persist_inventory_lifecycle(
+        locked, submit=True, update_fields=["status", "submitted_by", "submitted_at", "updated_at"]
+    )
     reconciliation.status = locked.status
 
 
@@ -883,11 +939,15 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
         return
     voucher_no = str(locked.pk)
     sles = list(
-        StockLedgerEntry.objects.select_related("item", "warehouse").filter(
+        StockLedgerEntry.objects.select_related("item", "warehouse", "warehouse__account").filter(
             voucher_type="Stock Reconciliation", voucher_no=voucher_no
         )
     )
     if sles:
+        from apps.accounting.models import GLEntry
+        from apps.settings.models import Restaurant
+
+        restaurant = Restaurant.load()
         bin_keys = {(s.item_id, s.warehouse_id) for s in sles}
         locked_bins = {
             (b.item_id, b.warehouse_id): b
@@ -898,48 +958,33 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
             )
             .order_by("item_id", "warehouse_id")
         }
-        for sle in sles:
-            bin_obj = locked_bins[(sle.item_id, sle.warehouse_id)]
-            StockLedgerEntry._create_entry_locked(
-                item=sle.item,
-                warehouse=sle.warehouse,
-                quantity=-sle.quantity,
-                voucher_type="Stock Reconciliation Cancellation",
-                voucher_no=voucher_no,
-                unit_rate=None,
-                voucher_detail_no=sle.voucher_detail_no,
-                posting_date=timezone.localdate(),
-                reversal_of_sle_id=sle.pk,
-                bin_obj=bin_obj,
-            )
-        from apps.accounting.models import GLEntry
-
-        gl_rows = list(
+        pre_wac_map = _reverse_sles_at_current_wac(
+            sles=sles,
+            locked_bins=locked_bins,
+            voucher_type="Stock Reconciliation Cancellation",
+            voucher_no=voucher_no,
+        )
+        gl_originals = list(
             GLEntry.objects.filter(voucher_type="Stock Reconciliation", voucher_no=voucher_no, is_cancelled=False)
         )
-        if gl_rows:
-            for gl in gl_rows:
+        if gl_originals:
+            for gl in gl_originals:
                 gl.is_cancelled = True
                 gl.save(update_fields=["is_cancelled", "updated_at"])
-            GLEntry.post(
-                posting_date=timezone.localdate(),
-                rows=[
-                    {
-                        "account": gl.account,
-                        "debit": gl.credit,
-                        "credit": gl.debit,
-                        "against": gl.against,
-                    }
-                    for gl in gl_rows
-                ],
-                voucher_type="Stock Reconciliation",
-                voucher_no=voucher_no,
-                remarks="Reversal",
+            new_rows = _cancellation_wac_gl_rows(
+                sles=sles,
+                pre_wac_map=pre_wac_map,
+                counter_account=_reconciliation_cancel_counter_account(locked),
+                variance_account=restaurant.inventory_price_variance_account if restaurant else None,
             )
+            if new_rows:
+                _post_gl_rows(timezone.localdate(), "Stock Reconciliation", voucher_no, new_rows, "Reversal")
     locked.cancelled_by = actor
     locked.cancelled_at = timezone.now()
     locked.status = "CANCELLED"
-    locked.save(update_fields=["status", "cancelled_by", "cancelled_at", "updated_at"])
+    persist_inventory_lifecycle(
+        locked, cancel=True, update_fields=["status", "cancelled_by", "cancelled_at", "updated_at"]
+    )
     reconciliation.status = locked.status
 
 
@@ -1023,7 +1068,7 @@ def submit_purchase_receipt(receipt):
     locked.warehouse = restaurant.store_warehouse
     locked.total = total
     locked.status = "SUBMITTED"
-    locked.save(update_fields=["warehouse", "status", "total", "updated_at"])
+    persist_inventory_lifecycle(locked, submit=True, update_fields=["warehouse", "status", "total", "updated_at"])
     receipt.warehouse = locked.warehouse
     receipt.total = locked.total
     receipt.status = locked.status
@@ -1043,14 +1088,14 @@ def cancel_purchase_receipt(receipt):
         raise ValidationError("Cancel the supplier invoice(s) and payment(s) for this receipt first.")
     voucher_no = str(locked.pk)
     sles = list(
-        StockLedgerEntry.objects.select_related("item", "warehouse").filter(
+        StockLedgerEntry.objects.select_related("item", "warehouse", "warehouse__account").filter(
             voucher_type="Purchase Receipt", voucher_no=voucher_no
         )
     )
     if not sles:
         _revert_last_purchase_rates(locked)
         locked.status = "CANCELLED"
-        locked.save(update_fields=["status", "updated_at"])
+        persist_inventory_lifecycle(locked, cancel=True, update_fields=["status", "updated_at"])
         receipt.status = locked.status
         return
     restaurant = Restaurant.load()
@@ -1064,27 +1109,12 @@ def cancel_purchase_receipt(receipt):
         )
         .order_by("item_id", "warehouse_id")
     }
-    pre_wac_map = {}
-    for sle in sles:
-        bin_obj = locked_bins[(sle.item_id, sle.warehouse_id)]
-        pre_wac = bin_obj.valuation_rate or Decimal("0")
-        pre_wac_map[sle.pk] = pre_wac
-        variance = sle.quantity * (pre_wac - sle.unit_rate)
-        variance_type = "CANCELLATION_WAC" if variance != 0 else ""
-        StockLedgerEntry._create_entry_locked(
-            item=sle.item,
-            warehouse=sle.warehouse,
-            quantity=-sle.quantity,
-            voucher_type="Purchase Receipt Cancellation",
-            voucher_no=voucher_no,
-            unit_rate=None,
-            voucher_detail_no=sle.voucher_detail_no,
-            posting_date=timezone.localdate(),
-            variance_amount=variance,
-            variance_type=variance_type,
-            reversal_of_sle_id=sle.pk,
-            bin_obj=bin_obj,
-        )
+    pre_wac_map = _reverse_sles_at_current_wac(
+        sles=sles,
+        locked_bins=locked_bins,
+        voucher_type="Purchase Receipt Cancellation",
+        voucher_no=voucher_no,
+    )
     gl_originals = list(
         GLEntry.objects.filter(voucher_type="Purchase Receipt", voucher_no=voucher_no, is_cancelled=False)
     )
@@ -1096,41 +1126,17 @@ def cancel_purchase_receipt(receipt):
             restaurant.stock_received_but_not_billed_account,
             "The stock received but not billed account",
         )
-        has_drift = False
-        for sle in sles:
-            pre_wac = pre_wac_map[sle.pk]
-            curr_amount = money(sle.quantity * pre_wac)
-            orig_amount = money(sle.stock_value_change)
-            if curr_amount != orig_amount:
-                has_drift = True
-                break
-        variance_acct = None
-        if has_drift:
-            variance_acct = _resolve_account(
-                restaurant.inventory_price_variance_account,
-                "The inventory price variance account",
-            )
-        new_rows = []
-        for sle in sles:
-            pre_wac = pre_wac_map[sle.pk]
-            curr_amount = money(sle.quantity * pre_wac)
-            orig_amount = money(sle.stock_value_change)
-            sih_acct = _resolve_account(sle.warehouse.account, "The warehouse account")
-            new_rows.append({"account": sih_acct, "credit": curr_amount})
-            new_rows.append({"account": grni_acct, "debit": orig_amount})
-            diff = curr_amount - orig_amount
-            if diff != 0:
-                if variance_acct is None:
-                    raise ValidationError("The inventory price variance account is not configured.")
-                if diff > 0:
-                    new_rows.append({"account": variance_acct, "debit": diff})
-                else:
-                    new_rows.append({"account": variance_acct, "credit": -diff})
+        new_rows = _cancellation_wac_gl_rows(
+            sles=sles,
+            pre_wac_map=pre_wac_map,
+            counter_account=grni_acct,
+            variance_account=restaurant.inventory_price_variance_account if restaurant else None,
+        )
         if new_rows:
             _post_gl_rows(timezone.localdate(), "Purchase Receipt", voucher_no, new_rows, "Reversal")
     _revert_last_purchase_rates(locked)
     locked.status = "CANCELLED"
-    locked.save(update_fields=["status", "updated_at"])
+    persist_inventory_lifecycle(locked, cancel=True, update_fields=["status", "updated_at"])
     receipt.status = locked.status
 
 

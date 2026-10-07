@@ -28,7 +28,7 @@ class StockLedgerGuardTestBase(TestCase):
             username="guardboss", password="testpass123", is_staff=True, is_superuser=True
         )
         cls.factory = RequestFactory()
-        cls.sle = StockLedgerEntry.objects.create(
+        cls.sle = StockLedgerEntry.create_entry(
             item=cls.item,
             warehouse=cls.store,
             quantity=Decimal("2"),
@@ -44,15 +44,40 @@ class StockLedgerGuardTestBase(TestCase):
 
 
 class StockLedgerEntryGuardTest(StockLedgerGuardTestBase):
-    def test_create_still_allowed(self):
-        sle = StockLedgerEntry.objects.create(
+    def test_unguarded_create_rejected(self):
+        with self.assertRaisesMessage(ValidationError, "create_entry"):
+            StockLedgerEntry.objects.create(
+                item=self.item,
+                warehouse=self.store,
+                quantity=Decimal("-1"),
+                voucher_type="Stock Entry",
+                voucher_no="G2",
+            )
+
+    def test_unguarded_save_rejected(self):
+        sle = StockLedgerEntry(
             item=self.item,
             warehouse=self.store,
-            quantity=Decimal("-1"),
+            quantity=Decimal("1"),
             voucher_type="Stock Entry",
-            voucher_no="G2",
+            voucher_no="G3",
         )
-        self.assertEqual(sle.quantity, Decimal("-1"))
+        with self.assertRaisesMessage(ValidationError, "create_entry"):
+            sle.save()
+
+    def test_unguarded_bulk_create_rejected(self):
+        with self.assertRaisesMessage(ValidationError, "create_entry"):
+            StockLedgerEntry.objects.bulk_create(
+                [
+                    StockLedgerEntry(
+                        item=self.item,
+                        warehouse=self.store,
+                        quantity=Decimal("1"),
+                        voucher_type="Stock Entry",
+                        voucher_no="G4",
+                    )
+                ]
+            )
 
     def test_update_rejected(self):
         self.sle.quantity = Decimal("5")
