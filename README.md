@@ -1,6 +1,6 @@
 # Spicy
 
-Spicy is a lightweight web-based POS for restaurant order management. Cashiers enter all orders and payments at the counter; waiters use physical dockets and do not access the system. It supports dine-in, delivery, takeaway, and related order types.
+Spicy is a lightweight web-based POS for restaurant order management. Cashiers enter all orders and payments at the counter. Waiters use physical dockets and do not access the system. It supports dine-in, delivery, takeaway, and related order types.
 
 ## Documentation
 
@@ -8,16 +8,11 @@ The reverse-engineered, living technical documentation for the entire project is
 
 ## Landing page
 
-The marketing site lives in its own repo — **[sanusi-dev/spicy-landing](https://github.com/sanusi-dev/spicy-landing)** — and deploys to Netlify independently. It is plain HTML/CSS/JS with no build step and no runtime dependency on this codebase.
-
-The coupling is on **content, not code**: the landing page must stay true to
-[`FEATURES.md`](FEATURES.md). When a feature ships, is deferred or changes
-behaviour, update the landing page in the same breath. The claims it makes that
-are easiest to get out of sync:
+The marketing site lives in its own repo — **[sanusi-dev/spicy-landing](https://github.com/sanusi-dev/spicy-landing)** — and deploys to Netlify independently. It is plain HTML/CSS/JS with no build step, and it has no runtime dependency on this codebase. The coupling is content-level: the landing page must stay true to [`FEATURES.md`](FEATURES.md). When a feature ships, is deferred, or changes behaviour, update the landing page in the same task. These claims are the easiest to get out of sync:
 
 | Landing page says | Backed by |
 |---|---|
-| Cashiers take every order and payment; waiters use paper dockets | Scope, `FEATURES.md` |
+| Cashiers take every order and payment. Waiters use paper dockets | Scope, `FEATURES.md` |
 | Food and drinks tracked and reported apart | §C Departmental split |
 | Shift opens with a float, closes against a counted drawer | §A5 Shift management |
 | Stock values itself at weighted-average cost | §A3, feature 14 |
@@ -26,21 +21,18 @@ are easiest to get out of sync:
 | Three staff roles: admin, manager, cashier | §A1, feature 3 |
 | "Local or Cloud. Your Choice." | §D Architecture constraints |
 
-Do **not** advertise these as shipped — they are Planned or Deferred in
-`FEATURES.md`: the local print agent (printer config exists, the agent does
-not), customer master / loyalty, discounts and coupons, and multi-branch.
+Do **not** advertise these as shipped. In `FEATURES.md` they are Planned or Deferred: the local print agent, customer master / loyalty, discounts and coupons, and multi-branch. For the print agent, printer config exists but the agent does not.
 
 ## Quickstart
 
 ### Prerequisites
 
-To run the app in the recommended configuration, you will need the following installed:
+The recommended configuration needs these installed:
 - [Docker](https://www.docker.com/get-started) and [Docker Compose](https://docs.docker.com/compose/install)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (for Python)
 - [node and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) (for JavaScript)
 
-On Windows, you will also need to install `make`, which you can do by
-[following these instructions](https://stackoverflow.com/a/57042516/8207).
+On Windows, you also need `make`. Follow [these instructions](https://stackoverflow.com/a/57042516/8207) to install it.
 
 ### Initial setup
 
@@ -53,7 +45,6 @@ make init
 This will:
 
 - Build and run your Postgres database
-- Build and run your Redis database
 - Run your database migrations
 - Install front end dependencies
 
@@ -65,26 +56,25 @@ make dev
 
 This will run your Django server and build and run your front end (JavaScript and CSS) pipeline.
 
-Your app should now be running! You can open it at [localhost:8000](http://localhost:8000/).
+Your app should now be running. Open it at [localhost:8000](http://localhost:8000/).
 
 If you're just getting started, [try these steps next](https://docs.saaspegasus.com/getting-started/#post-installation-steps).
 
 ## Using the Makefile
 
-You can run `make` to see other helper functions, and you can view the source
-of the file in case you need to run any specific commands.
+Run `make` to see other helper functions. You can view the source of the file when you need to run any specific commands.
 
 ## Installation - Native
 
-You can also install/run the app directly on your OS using the instructions below.
+You can also install and run the app directly on your OS using the instructions below.
 
-You can setup a virtual environment and install dependencies in a single command with:
+Set up a virtual environment and install dependencies in a single command:
 
 ```bash
 uv sync
 ```
 
-This will create your virtual environment in the `.venv` directory of your project root.
+This creates your virtual environment in the `.venv` directory of your project root.
 
 ## Set up database
 
@@ -128,27 +118,6 @@ Then build (and watch for changes locally):
 npm run dev
 ```
 
-## Running Celery
-
-Celery can be used to run background tasks.
-
-Celery requires [Redis](https://redis.io/) as a message broker, so make sure
-it is installed and running.
-
-You can run it using:
-
-```bash
-celery -A spicy worker -l INFO --pool=solo
-```
-
-Or with celery beat (for scheduled tasks):
-
-```bash
-celery -A spicy worker -l INFO -B --pool=solo
-```
-
-Note: Using the `solo` pool is recommended for development but not for production.
-
 ## Installing Git commit hooks
 
 To install the Git commit hooks run the following:
@@ -157,7 +126,7 @@ To install the Git commit hooks run the following:
 uv run pre-commit install --install-hooks
 ```
 
-Once these are installed they will be run on every commit.
+Once these are installed, they will run on every commit.
 
 For more information see the [docs](https://docs.saaspegasus.com/code-structure#code-formatting).
 

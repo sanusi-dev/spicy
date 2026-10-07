@@ -49,7 +49,7 @@ default_context:
   use_api_keys: n
   use_async: n
   use_auto_reload: y
-  use_celery: y
+  use_celery: n
   use_cloud_media_storage: n
   use_dark_mode: n
   use_debug_toolbar: y

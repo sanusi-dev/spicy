@@ -3,7 +3,6 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 import environ
 from django.utils.translation import gettext_lazy
@@ -41,7 +40,6 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "django_htmx",
     "django_vite",
-    "django_celery_beat",
     "django_hugeicons_stroke",
 ]
 
@@ -243,31 +241,6 @@ EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.
 EMAIL_SUBJECT_PREFIX = "[Spicy] "
 
 SITE_ID = 1
-
-# `or` treats an empty REDIS_URL as unset so it falls back instead of yielding an empty URL
-REDIS_URL = env("REDIS_URL", default=None) or env("REDIS_TLS_URL", default=None)
-if not REDIS_URL:
-    REDIS_HOST = env("REDIS_HOST", default="localhost")
-    REDIS_PORT = env("REDIS_PORT", default="6379")
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
-
-DUMMY_CACHE = {
-    "BACKEND": "django.core.cache.backends.dummy.DummyCache",
-}
-REDIS_CACHE = {
-    "BACKEND": "django.core.cache.backends.redis.RedisCache",
-    "LOCATION": REDIS_URL,
-}
-CACHES = {
-    "default": DUMMY_CACHE if DEBUG else REDIS_CACHE,
-}
-
-CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-
-# Add tasks to this dict and run `python manage.py bootstrap_celery_tasks` to create them
-SCHEDULED_TASKS: dict[str, Any] = {}
-
 
 PROJECT_METADATA = {
     "NAME": gettext_lazy("Spicy"),

@@ -32,10 +32,7 @@ plugins = ["mypy_django_plugin.main"]
 [[tool.mypy.overrides]]
 module = [
     "allauth.*",
-    "celery.*",
-    "django_celery_beat.*",
     "environ.*",
-    "kombu.*",
 ]
 ignore_missing_imports = true
 
@@ -61,18 +58,13 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "Django>=6.0",
-    "celery",
-    "celery[redis]",
     "django-allauth>=65.13.0",
-    "django-celery-beat",
     "django-environ",
     "django-htmx",
     "django-hugeicons-stroke==1.1.2",
     "django-vite>=3.1.0",
-    "mypy>=1.18.2,<2",
     "pillow>=12.3.0",
     "psycopg",
-    "redis",
 ]
 
 [dependency-groups]
@@ -86,7 +78,6 @@ dev = [
     "psycopg[binary]",
     "mypy>=1.18.2",
     "django-stubs>=5.0.0",
-    "types-python-dateutil>=2.9.0.20251108",
     "djlint>=1.45.2",
 ]
 prod = [

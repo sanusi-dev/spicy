@@ -23,9 +23,6 @@ dev: ## Start Django and npm dev servers
 django: ## Run Django dev server
 	@uv run manage.py runserver
 
-celery: ## Start Celery and celery beat
-	@uv run celery -A spicy worker -l INFO --beat --pool=solo
-
 manage: ## Run any manage.py command. E.g. `make manage ARGS='createsuperuser'`
 	@uv run manage.py ${ARGS}
 

@@ -31,8 +31,6 @@ feature's detailed plan in `PLAN.md`.
 | Database | PostgreSQL |
 | Package manager | uv (pyproject.toml) — never use bare `pip install` |
 | JS build | Vite + django-vite (sources in `/assets/`, loaded via `{% vite_asset %}`) |
-| Task queue | Celery + Redis (periodic background tasks) |
-| Cache / broker | Redis |
 | Thermal printing | Local Python print agent (ESC/POS over LAN) |
 | Auth | django-allauth |
 
@@ -68,7 +66,7 @@ Spicy/
 │   ├── reports/         ← Daily P&L document and P&L settings
 │   └── web/             ← home, backoffice dashboard, middleware, context processors
 │   (planned: printing — deferred: customers, coupons)
-├── spicy/                            ← project package (settings.py, urls.py, celery.py, wsgi.py)
+├── spicy/                            ← project package (settings.py, urls.py, wsgi.py)
 └── templates/
     ├── pos/            ← cashier-facing POS screen
     └── backoffice/     ← manager/owner back office

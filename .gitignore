@@ -8,7 +8,6 @@
 venv
 db.sqlite3
 .sass-cache/
-celerybeat-schedule
 spicy/localsettings.py
 spicy/local.py
 static_root/
