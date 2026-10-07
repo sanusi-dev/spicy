@@ -19,7 +19,7 @@ Open shift button
 
 ## Database and Side Effects
 
-`open_shift()` is atomic. It locks the singleton Restaurant row, checks for `status=SUBMITTED` with no closing link, creates the opening row and one child row per supplied mode, validates, then calls `POSOpeningEntry.submit()`. `submit()` repeats the one-open-shift check while holding locks to close the concurrent POST race.
+`open_shift()` is atomic. It locks the singleton Restaurant row. It checks for `status=SUBMITTED` with no closing link. It creates the opening row and one child row per supplied mode. It validates, then calls `POSOpeningEntry.submit()`. `submit()` repeats the one-open-shift check while holding locks to close the concurrent POST race.
 
 The shift is globally shared. The opening cashier is recorded, but later POS operations do not require that same user.
 
@@ -33,4 +33,4 @@ The shift is globally shared. The opening cashier is recorded, but later POS ope
 
 ## Backoffice Variant
 
-All `staff.views` shift pages are `@backoffice_required` (Manager/Admin only); cashiers use the POS route. `staff.views.opening_entry_create()` directly creates a draft and child rows through `_save_opening_entry()`. The detail page can edit draft rows. `opening_entry_submit()` calls `full_clean()` then `entry.submit()`. This is a separate path from `open_shift()` and does not share its explicit Restaurant-exists check.
+All `staff.views` shift pages are `@backoffice_required` (Manager/Admin only). Cashiers use the POS route. `staff.views.opening_entry_create()` directly creates a draft and child rows through `_save_opening_entry()`. The detail page can edit draft rows. `opening_entry_submit()` calls `full_clean()` then `entry.submit()`. This is a separate path from `open_shift()` and does not share its explicit Restaurant-exists check.

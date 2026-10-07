@@ -8,7 +8,7 @@
 
 POS views use `_is_htmx()` and `_render_pos_surface()` in `apps/orders/views_pos.py`. For HTMX requests, a template fragment is selected with Django's inline partial syntax, for example `pos/index.html#surface`, `#cart`, `#catalog_workspace`, or `order_history_detail.html#drawer`.
 
-The same URL supports normal progressive enhancement: non-HTMX requests receive a redirect or full page, while HTMX requests receive the smallest surface needed for the target.
+The same URL supports normal progressive enhancement. Non-HTMX requests receive a redirect or full page, while HTMX requests receive the smallest surface needed for the target.
 
 ## Important Attributes
 
@@ -22,9 +22,15 @@ The same URL supports normal progressive enhancement: non-HTMX requests receive 
 - `hx-swap-oob="outerHTML"` refreshes the catalog grid or shell navigation outside the primary target.
 - `hx-trigger="input changed delay:250ms, search"` debounces catalog search.
 
+## Confirmation dialogs
+
+`assets/javascript/confirm.js` listens for `htmx:confirm` (and for ordinary submit/click on elements that are not HTMX). Templates opt in with `data-confirm-title`, `data-confirm-message` / `data-confirm-body`, and `data-confirm-btn`. The wrapper passes those strings to SweetAlert as `titleText` and `text`, which create text nodes. User-controlled values such as a display name or a menu item name may sit in those attributes. They must stay out of `html:` / `title`, and the attribute values must not contain markup such as `<strong>`.
+
+Native `hx-confirm` still uses HTMX's `window.confirm` path. The SweetAlert wrapper only runs when a `data-confirm-*` attribute is present.
+
 ## Events and Messages
 
-`pos_order_add_item()` sets `HX-Trigger: close-add-on-dialog` on success. `MessagesMiddleware` merges Django messages into `HX-Trigger.showMessages`; `toast.js` listens for that event. Existing trigger values are parsed as JSON and preserved.
+`pos_order_add_item()` sets `HX-Trigger: close-add-on-dialog` on success. `MessagesMiddleware` merges Django messages into `HX-Trigger.showMessages`. `toast.js` listens for that event. Existing trigger values are parsed as JSON and preserved.
 
 ### Redirects and toasts
 
@@ -32,12 +38,12 @@ A 3xx redirect's response headers are dropped when the browser follows it, so an
 
 ### Global error state
 
-Both shells surface HTMX failures that have no per-action banner. `templates/web/app/app_base.html` reveals `#htmx-error` on `htmx:responseError`; `templates/pos/base.html` reveals its own `#htmx-error` on `htmx:responseError` and `htmx:sendError` (an unreachable server is the common POS failure) and hides it again after the next successful request. Dismissing the banner is manual. Per-action banners in the cart still arrive as 200 responses carrying `error` in the context.
+Both shells surface HTMX failures that have no per-action banner. `templates/web/app/app_base.html` reveals `#htmx-error` on `htmx:responseError`. `templates/pos/base.html` reveals its own `#htmx-error` on `htmx:responseError` and `htmx:sendError` (an unreachable server is the common POS failure). It hides the banner again after the next successful request. Dismissing the banner is manual. Per-action banners in the cart still arrive as 200 responses carrying `error` in the context.
 
 ## Formset Partials
 
-Inventory item add/remove endpoints receive the full form POST, rebuild contiguous management-form indices using `inventory.forms.add_formset_row()` or `remove_formset_row()`, and return a fragment from the same form template. They do not save rows until the parent form is submitted. Item UOM conversions use the same pattern (`inventory:item_uom_add` / `item_uom_remove`). Purchase-receipt lines `hx-get` `inventory:purchase_receipt_item_meta` (replace the UOM widget when the item changes) and `inventory:purchase_receipt_stock_qty_preview` (show e.g. `5 Crate = 120 Bottle`).
+Inventory item add/remove endpoints receive the full form POST. They rebuild contiguous management-form indices using `inventory.forms.add_formset_row()` or `remove_formset_row()`, and return a fragment from the same form template. They do not save rows until the parent form is submitted. Item UOM conversions use the same pattern (`inventory:item_uom_add` / `item_uom_remove`). Purchase-receipt lines use two `hx-get` endpoints. `inventory:purchase_receipt_item_meta` replaces the UOM widget when the item changes. `inventory:purchase_receipt_stock_qty_preview` shows e.g. `5 Crate = 120 Bottle`.
 
 ## HTMX Debugging
 
-Inspect the request's `HX-Request`, `HX-Target`, and `HX-Current-URL` headers, then compare the view branch with the target ID in the template. A correct fragment rendered into the wrong target is a frontend synchronization bug, not a model bug. For a missing toast, inspect the response `HX-Trigger` header and `MessagesMiddleware`.
+Inspect the request's `HX-Request`, `HX-Target`, and `HX-Current-URL` headers, then compare the view branch with the target ID in the template. A correct fragment rendered into the wrong target is a frontend synchronization bug. The model is then not at fault. For a missing toast, inspect the response `HX-Trigger` header and `MessagesMiddleware`.

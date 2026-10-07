@@ -1,6 +1,6 @@
 # Execution Flow: Submit Order
 
-In the current POS, "submit" is the successful payment settlement path. Sending an order to the kitchen does not submit it; it creates KOT/BOT snapshots while leaving the order `DRAFT`.
+In the current POS, "submit" is the successful payment settlement path. Sending an order to the kitchen does not submit it. It creates KOT/BOT snapshots while leaving the order `DRAFT`.
 
 ```text
 Pay button
@@ -26,19 +26,19 @@ Pay button
   -> success message and redirect to POS home
 ```
 
-Settlement is the sale event, so it re-stamps `posting_date`/`posting_time` to the submission moment. The draft's creation stamps are provisional; the Daily P&L, GL, and sales reports then bucket a sale on the same day the shift close counted it.
+Settlement is the sale event, so it re-stamps `posting_date`/`posting_time` to the submission moment. The draft's creation stamps are provisional. The Daily P&L, GL, and sales reports then bucket a sale on the same day the shift close counted it.
 
 ## Validation Order
 
-The service rejects non-draft/return/empty orders, rejects a settlement actor who neither created the draft nor is a Manager/Admin, revalidates current Item/MenuItem availability, confirms the linked shift is active, snapshots/validates the configured stock warehouse, rechecks locked drink bins, then validates payment rows. Existing payment rows are rejected.
+The service rejects non-draft/return/empty orders. It rejects a settlement actor who neither created the draft nor is a Manager/Admin. It revalidates current Item/MenuItem availability. It confirms the linked shift is active. It snapshots/validates the configured stock warehouse. It rechecks locked drink bins. Then it validates payment rows. Existing payment rows are rejected.
 
 ## Totals and Payments
 
-Line amounts are summed into `net_total` and `grand_total`; `rounded_total` is whole-unit half-up. Settlement changes `grand_total` to the rounded value. Total payment must cover it. Cash may create change; non-cash overpayment is rejected.
+Line amounts are summed into `net_total` and `grand_total`. `rounded_total` is whole-unit half-up. Settlement changes `grand_total` to the rounded value. Total payment must cover it. Cash may create change. Non-cash overpayment is rejected.
 
 ## Paid-Order Ticket Guarantee
 
-A paid (SUBMITTED) order must always have a kitchen/bar ticket record for every production unit its items belong to. When the order has no KOTs at settlement, the service plans tickets with the same departmental routing as the send action (`_plan_tickets`: production-unit lookup, takeaway `block_takeaway_kot` skip), then builds immutable NEW_ORDER KOT/BOT snapshots (`_build_ticket_snapshots`) and audits `KOTS_CREATED`. An empty plan (e.g. takeaway where every unit blocks KOTs) settles silently without tickets; a department without a configured production unit raises the same `ValidationError` as the send button and blocks settlement. `dispatch_tickets` runs inside the settlement, but a print failure never blocks it — the ticket stays `PENDING` and is retried from order history.
+A paid (SUBMITTED) order must always have a kitchen/bar ticket record for every production unit its items belong to. When the order has no KOTs at settlement, the service plans tickets with the same departmental routing as the send action. `_plan_tickets` covers production-unit lookup and the takeaway `block_takeaway_kot` skip. It then builds immutable NEW_ORDER KOT/BOT snapshots (`_build_ticket_snapshots`) and audits `KOTS_CREATED`. An empty plan (e.g. takeaway where every unit blocks KOTs) settles silently without tickets. A department without a configured production unit raises the same `ValidationError` as the send button and blocks settlement. `dispatch_tickets` runs inside the settlement. A print failure never blocks it — the ticket stays `PENDING` and is retried from order history.
 
 ## Atomicity
 
@@ -46,7 +46,7 @@ Payment inserts use nested savepoints to convert uniqueness errors to validation
 
 ## Return Submission
 
-A submitted return is a *separate* path (`orders.services.submit_return`), not a submission of the same document. It re-stamps `posting_date`/`posting_time` to the submission moment, restores drink stock with positive SLEs (`voucher_type="POS Return"`) unless the line is marked not restockable, writes negative `OrderPayment` rows proportional to the source net tenders, sets `paid_amount` to the negative refund total, keeps `is_paid=False`, transitions the return draft to `SUBMITTED`, and audits `RETURN_SUBMITTED`. Return documents stay out of paid-sales revenue queries (`is_paid=True` filters and `OrderQuerySet.submitted_in_shift` exclude them); at shift close their refund rows reduce the expected drawer per mode.
+A submitted return is a *separate* path (`orders.services.submit_return`). The same document is never re-submitted. It re-stamps `posting_date`/`posting_time` to the submission moment. It restores drink stock with positive SLEs (`voucher_type="POS Return"`) unless the line is marked not restockable. It writes negative `OrderPayment` rows proportional to the source net tenders. It sets `paid_amount` to the negative refund total and keeps `is_paid=False`. It transitions the return draft to `SUBMITTED` and audits `RETURN_SUBMITTED`. Return documents stay out of paid-sales revenue queries (`is_paid=True` filters and `OrderQuerySet.submitted_in_shift` exclude them). At shift close, their refund rows reduce the expected drawer per mode.
 
 ## Important Difference from Older Feature Text
 

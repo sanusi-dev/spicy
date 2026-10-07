@@ -16,7 +16,7 @@ Cart +/-/remove button
   -> replace #cart-panel
 ```
 
-Actions are `increment`, `decrement`, `remove`, and default `update`. A quantity <= 0 deletes the line. Increment/decrement of a missing line raises; a set/update for a missing line is effectively a no-op.
+Actions are `increment`, `decrement`, `remove`, and default `update`. A quantity <= 0 deletes the line. Increment/decrement of a missing line raises. A set/update for a missing line is effectively a no-op.
 
 ## Guest Count and Order Type
 

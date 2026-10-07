@@ -1,6 +1,6 @@
 # Spicy Documentation
 
-This directory is the living technical map of the current Spicy source tree. It describes the implementation that exists in `apps/`, `templates/`, `assets/`, and `spicy/`; it is not a restatement of the intended product scope.
+This directory is the living technical map of the current Spicy source tree. It describes the implementation that exists in `apps/`, `templates/`, `assets/`, and `spicy/`. It is not a restatement of the intended product scope.
 
 ## Read This First
 
@@ -16,7 +16,6 @@ This directory is the living technical map of the current Spicy source tree. It 
 | Understand sales and ledger reports | [Query reports](workflows/query-reports.md) |
 | Trace an action end to end | [Execution flows](#execution-flows) |
 | Debug an unexpected result | [Troubleshooting](debugging/troubleshooting.md) |
-| Plan the receipt-first supplier invoice UX | [Supplier invoice receipt-first UX](supplier-invoice-receipt-first-ux.md) |
 
 ## Architecture
 
@@ -43,7 +42,7 @@ This directory is the living technical map of the current Spicy source tree. It 
 
 ## Execution Flows
 
-These pages answer: "When I perform this action, what happens next?" Each one names the frontend trigger, URL, view, service/model path, database effects, side effects, and response fragment.
+These pages answer one question: when I perform this action, what happens next? Each page names the frontend trigger, URL, view, service/model path, and response fragment. It also lists database effects and side effects.
 
 - [Open shift](execution-flows/open-shift.md)
 - [Close shift](execution-flows/close-shift.md)
@@ -74,15 +73,12 @@ These pages answer: "When I perform this action, what happens next?" Each one na
 
 - [Backup and restore](ops/backup-restore.md): nightly database + media snapshots, cron schedule, off-machine copies, and the restore drill.
 
-## Plans
+## Plans and Reviews
 
-- [PWAC plan](pwac-plan.md): FIFO→PWAC costing decisions.
-- [PWAC implementation plan](pwac-implementation-plan.md): build sequence for PWAC.
-- [Supplier invoice receipt-first UX](supplier-invoice-receipt-first-ux.md): agreed redesign — invoice generated from receipt; dedicated expense lines.
-
-## Reviews
-
-- [PWAC migration review](reviews/pwac-review.md): findings from the FIFO→PWAC code review, with fix instructions and status tracking.
+Phase 9 (printing) is the only unbuilt phase. Its detailed decisions live once Phase 9 starts
+(see `PLAN.md` §4.8). Completed-phase plans are retired in place: PWAC costing (§4.9),
+supplier payables (§4.1), UOM conversion (§4.10), and reconciliation (§4.11). Current product
+facts live in `FEATURES.md`. The archive keeps the retired plan history verbatim.
 
 ## Archive
 
@@ -90,4 +86,4 @@ These pages answer: "When I perform this action, what happens next?" Each one na
 
 ## Documentation Rules
 
-Read the relevant page before changing complex behavior. Update the relevant page in the same task when code changes architecture, dependencies, models, state transitions, side effects, or user-visible workflows. Keep this index synchronized when adding or removing documentation. Describe current behavior and mark unresolved behavior with `⚠️ Requires verification`.
+Read the relevant page before changing complex behavior. Update the relevant page in the same task when code changes architecture, dependencies, models, state transitions, side effects, or user-visible workflows. Keep this index synchronized when you add or remove documentation. Describe current behavior, and mark unresolved behavior with `⚠️ Requires verification`.

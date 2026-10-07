@@ -16,7 +16,7 @@
 
 - Item details: `Exists(MenuItem...)` annotates whether variants are on a menu.
 - Ledger pages filter item, warehouse, and posting date with `select_related`.
-- FIFO reads the latest non-cancelled SLE ordered by posting time and primary key.
+- Each ledger read takes the latest non-cancelled SLE, ordered by posting time and primary key.
 - Reservation/settlement locks Bin rows for the relevant item/warehouse set.
 
 ## Backoffice Queries
@@ -24,11 +24,11 @@
 - Order list annotates item/ticket/pending-ticket counts and searches invoice, customer, or numeric order number.
 - KOT list filters KOT fields and joins order invoice/order number.
 - Staff list prefetches only Spicy groups, paginates 20 users, and derives roles from the cached group set.
-- Menu list annotates item count; inventory item list supports flags, variants, active status, and name/code search.
+- Menu list annotates item count. Inventory item list supports flags, variants, active status, and name/code search.
 
 ## Query reports
 
-Sales reports aggregate `Order` (`status=SUBMITTED`) by `posting_date` and join `OrderItem` for FOOD/DRINKS amounts so order-level rounding is not multiplied by line count. Item-wise, employee-wise, service-wise, and time-wise reports use `values()` + `Sum`/`Count` with `ExtractHour` / `ExtractMonth`. Cancelled invoices read `Order.status=CANCELLED` and `is_return=False`. POS register filters `POSClosingEntry.status=SUBMITTED` and prefetches `closing_payments`. GL/trial balance/simple P&L query `GLEntry` (cancelled originals included so reversals net to zero); trial balance groups leaf accounts with `Sum(debit)` / `Sum(credit)` and drops zero balances.
+Sales reports aggregate `Order` (`status=SUBMITTED`) by `posting_date` and join `OrderItem` for FOOD/DRINKS amounts so order-level rounding is not multiplied by line count. Item-wise, employee-wise, service-wise, and time-wise reports use `values()` + `Sum`/`Count` with `ExtractHour` / `ExtractMonth`. Cancelled invoices read `Order.status=CANCELLED` and `is_return=False`. POS register filters `POSClosingEntry.status=SUBMITTED` and prefetches `closing_payments`. GL/trial balance/simple P&L query `GLEntry` (cancelled originals included so reversals net to zero). Trial balance groups leaf accounts with `Sum(debit)` / `Sum(credit)` and drops zero balances.
 
 ## Query Tracing
 
