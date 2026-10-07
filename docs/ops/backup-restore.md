@@ -1,10 +1,10 @@
 # Backup and Restore
 
-One command snapshots the restaurant database plus uploaded images on the cashier desktop; one command puts them back. A Docker volume alone is not a backup.
+One command snapshots the restaurant database plus uploaded images on the cashier desktop. One command puts them back. A Docker volume alone is not a backup.
 
 ## Prerequisites
 
-- The `db` compose service runs (`make start-bg`); no new credentials — the scripts use `POSTGRES_DB`/`POSTGRES_USER` from the environment, defaulting to `spicy`/`postgres` like `docker-compose.yml`.
+- The `db` compose service runs (`make start-bg`). No new credentials — the scripts use `POSTGRES_DB`/`POSTGRES_USER` from the environment, defaulting to `spicy`/`postgres` like `docker-compose.yml`.
 - Snapshots land in `backups/` (gitignored, never committed — dumps contain sales figures and password hashes).
 
 ## Usage
@@ -26,7 +26,7 @@ Retention: each successful backup deletes `spicy-*.sql.gz` / `media-*.tar.gz` ol
 
 ## Schedule
 
-Documented, not installed by automation — after close, before midnight:
+The schedule below is documented only, with no automation installed. Run it after close, before midnight:
 
 ```cron
 30 23 * * * cd <repo> && make backup >> backups/backup.log 2>&1
@@ -52,8 +52,8 @@ After any change to either script:
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Cannot connect to the Docker daemon` / compose error | Docker or the `db` container is down | `make start-bg`, wait for healthy, retry |
-| `pg_dump: error` / empty `.sql.gz` | Wrong `POSTGRES_DB`/`POSTGRES_USER`, or db unhealthy | Verify with `make dbshell`; export the matching env values and retry |
-| `No space left on device` | Disk full mid-dump | Free space, delete old snapshots, retry; the partial file is left for inspection |
+| `pg_dump: error` / empty `.sql.gz` | Wrong `POSTGRES_DB`/`POSTGRES_USER`, or db unhealthy | Verify with `make dbshell`. Export the matching env values and retry |
+| `No space left on device` | Disk full mid-dump | Free space, delete old snapshots, retry. The partial file is left for inspection |
 | `Media archive not found` / `Usage:` | Wrong path or missing `<dump.sql.gz>` | Pass an existing `backups/spicy-*.sql.gz` path |
 | Restore hangs or `database is being accessed by other users` | Dev server / beat still connected | `make stop`, then re-run (the script terminates backends once, then proceeds) |
 | `Aborted.` | Anything other than `yes` was typed | Re-run and type `yes`, or pass `--yes` |

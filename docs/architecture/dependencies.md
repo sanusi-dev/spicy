@@ -71,11 +71,15 @@ An order line snapshots the item department and stock flag. Only DRINKS lines ca
 
 ### Payment to shift
 
-`OrderPayment.mode_of_payment` -> `ModeOfPayment`; `POSOpeningEntry.opening_payments` and `POSClosingEntry.closing_payments` use the same payment master. Settlement accepts only enabled modes that were declared at shift opening and have a `PaymentGLMapping` pointing at a leaf account. Closing aggregates order payment rows by mode, subtracts cash change, and subtracts submitted return refunds per mode.
+`OrderPayment.mode_of_payment` -> `ModeOfPayment`. `POSOpeningEntry.opening_payments` and `POSClosingEntry.closing_payments` use the same payment master. Settlement accepts only enabled modes that were declared at shift opening and have a `PaymentGLMapping` pointing at a leaf account. Closing aggregates order payment rows by mode, subtracts cash change, and subtracts submitted return refunds per mode.
 
 ### Order to GL
 
-`settle_order` calls `accounting.services.post_order_gl` inside its atomic block after the order flips SUBMITTED and drink deductions are written. Income resolves ProductionUnit (by line department) → Restaurant default; COGS uses the PWAC outbound value of the settle-time drink SLEs against the warehouse account, expensed to the Restaurant default expense account. Change fails closed unless `Restaurant.account_for_change_amount` is set. Payment modes that resolve to an income account are rejected, and posting fails closed if any account lands on both the debit and credit side of the voucher — such legs would otherwise net to zero and vanish. Returns post refund GL via `post_refund_gl` rebuilt from the returned lines: refunds debit the per-department Sales Returns account (`ProductionUnit.sales_returns_account` → `Restaurant.default_sales_returns_account`, failing closed when neither is set). Restocked drinks debit the warehouse and credit COGS at the source sale's settle-time WAC (no variance leg); non-restockable drink lines credit COGS and debit the wastage account at the same rate with no warehouse movement (the two accounts must differ). The variance JE on shift close flows through `staff.services.submit_closing_entry` → `accounting.services.post_cash_variance_gl`.
+`settle_order` calls `accounting.services.post_order_gl` inside its atomic block. The call runs after the order flips SUBMITTED and drink deductions are written.
+
+Income resolves ProductionUnit (by line department) → Restaurant default. COGS uses the PWAC outbound value of the settle-time drink SLEs against the warehouse account. The posting expenses that value to the Restaurant default expense account. Change fails closed unless `Restaurant.account_for_change_amount` is set. Settlement rejects payment modes that resolve to an income account. Posting fails closed when any account lands on both the debit and credit side of the voucher. Such legs would otherwise net to zero and vanish.
+
+Returns post refund GL via `post_refund_gl`, rebuilt from the returned lines. Refunds debit the per-department Sales Returns account (`ProductionUnit.sales_returns_account` → `Restaurant.default_sales_returns_account`). The flow fails closed when neither is set. Restocked drinks debit the warehouse and credit COGS at the source sale's settle-time WAC, with no variance leg. Non-restockable drink lines credit COGS and debit the wastage account at the same rate, with no warehouse movement. The two accounts must differ. The variance JE on shift close flows through `staff.services.submit_closing_entry` → `accounting.services.post_cash_variance_gl`.
 
 ### Settings to stock routing
 
@@ -83,8 +87,8 @@ An order line snapshots the item department and stock flag. Only DRINKS lines ca
 
 ## Direct Imports and Coupling Hotspots
 
-- `apps/orders/services.py` imports inventory models, menu models, payment models, and uses local imports for settings, staff, and production units. This is the strongest cross-app coupling point.
-- `apps/orders/views_pos.py` imports staff forms/services, settings, inventory, menu, payments, users, and order services because the POS surface spans all domains.
+- `apps/orders/services.py` imports inventory models, menu models, and payment models. It uses local imports for settings, staff, and production units. This is the strongest cross-app coupling point.
+- `apps/orders/views_pos.py` imports staff forms/services, settings, inventory, menu, payments, users, and order services, because the POS surface spans all domains.
 - `apps/staff/services.py` queries orders and payment rows to calculate shift totals.
 - `apps/settings/models.py` imports orders and inventory inside `Restaurant.clean()` to prevent unsafe warehouse changes.
 - `apps/inventory/models.py` imports settings and menu inside validation/save methods to prevent disabling configured warehouses or unselling active menu items.
@@ -95,9 +99,9 @@ An order line snapshots the item department and stock flag. Only DRINKS lines ca
 
 - `Order.delete()` imports `apps.orders.services.release_drink_reservations()` to release stock reservations before deletion.
 - `UserConfig.ready()` and `InventoryConfig.ready()` register `post_migrate` seed callbacks.
-- Every backoffice and POS view declares its role requirement via `apps/users/decorators.py`; `LoginRequiredMiddleware` enforces site-wide login.
+- Every backoffice and POS view declares its role requirement via `apps/users/decorators.py`. `LoginRequiredMiddleware` enforces site-wide login.
 - HTMX templates depend on exact partial anchors such as `#pos-main`, `#cart-panel`, `#catalog-workspace`, and `#order-details-drawer`.
-- `MessagesMiddleware` depends on `HX-Trigger` and `HX-Redirect`; `assets/javascript/toast.js` depends on the resulting `showMessages` event.
+- `MessagesMiddleware` depends on `HX-Trigger` and `HX-Redirect`. `assets/javascript/toast.js` depends on the resulting `showMessages` event.
 
 ## Execution Chains
 

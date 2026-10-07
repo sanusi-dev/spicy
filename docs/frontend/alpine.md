@@ -16,18 +16,18 @@
 
 ## Drawer and Modal Lifecycle
 
-`orderDetailsDrawer` optionally animates in after two animation frames, focuses the close button, traps Tab focus, handles Escape/backdrop close, dispatches `order-details-closed`, removes its root node, and restores focus to the history row. `posModalDialog` records previous focus, focuses the first control, and either navigates to a close URL or removes the dialog root.
+`orderDetailsDrawer` optionally animates in after two animation frames. It focuses the close button, traps Tab focus, and handles Escape/backdrop close. It then dispatches `order-details-closed`, removes its root node, and restores focus to the history row. `posModalDialog` records previous focus, focuses the first control, and either navigates to a close URL or removes the dialog root.
 
-These components do not fetch data or enforce permissions. HTMX provides the server request; Alpine only controls local presentation and focus.
+These components do not fetch data or enforce permissions. HTMX provides the server request. Alpine only controls local presentation and focus.
 
 ## Alpine/HTMX Risk
 
-HTMX replaces DOM nodes containing Alpine state. Any state that must survive a swap is stored in the server session or database, not in Alpine. Customer active-card state is server session data; guest count and item customer indices are database data. If a new fragment omits an Alpine root or target ID, the visible UI may become stale without changing server state.
+HTMX replaces DOM nodes containing Alpine state. Any state that must survive a swap is stored in the server session or database. It never lives in Alpine. Customer active-card state is server session data. Guest count and item customer indices are database data. If a new fragment omits an Alpine root or target ID, the visible UI may become stale without changing server state.
 
 ## Server Values in Alpine Expressions
 
-Alpine runs attribute text as JavaScript. Server values interpolated into JS string literals therefore use `|escapejs`: `Number('{{ value|escapejs }}')` in `payment/dialog.html`, `close_shift.html`, and `shift/cash_out_dialog.html`. Django's default HTML escaping is not sufficient here because the browser decodes HTML entities while reading the attribute, before Alpine parses the text. `escapejs` leaves ordinary numbers unchanged (`1500.00` stays `1500.00`); a non-numeric value degrades to a `NaN` preview instead of a broken component. The id interpolations in `order_history.html` and `catalog/add_on_dialog.html` are server-generated pks and are not escaped.
+Alpine runs attribute text as JavaScript. Server values interpolated into JS string literals therefore use `|escapejs`: `Number('{{ value|escapejs }}')` in `payment/dialog.html`, `close_shift.html`, and `shift/cash_out_dialog.html`. Django's default HTML escaping is not sufficient here, because the browser decodes HTML entities while reading the attribute, before Alpine parses the text. `escapejs` leaves ordinary numbers unchanged (`1500.00` stays `1500.00`). A non-numeric value degrades to a `NaN` preview instead of a broken component. The id interpolations in `order_history.html` and `catalog/add_on_dialog.html` are server-generated pks and are not escaped.
 
 ## Other Frontend Code
 
-`floor-plan.js` registers a table layout editor and posts to a route/model not present in the current Django tree. Treat it as orphaned-looking code and do not use it as evidence of an active floor-plan workflow.
+`floor-plan.js` registers a table layout editor and posts to a route/model not present in the current Django tree. Treat it as orphaned-looking code, and do not use it as evidence of an active floor-plan workflow.

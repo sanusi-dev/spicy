@@ -24,7 +24,7 @@ Order screen or filter/search input
 
 `drink_stock_available()` annotates each in-memory menu line. FOOD lines remain available regardless of Bin quantity. DRINKS are disabled if they are not stock items, if Restaurant has no enabled Bar/POS warehouse, or if `actual_qty - reserved_qty <= 0`.
 
-The catalog may still render a line whose underlying Item was directly made disabled/non-sales because the context query only filters menu-line disabled state. The add POST performs the authoritative Item validation and returns a cart error.
+The catalog may still render a line whose underlying Item was directly made disabled/non-sales, because the context query only filters menu-line disabled state. The add POST performs the authoritative Item validation and returns a cart error.
 
 ## HTMX Behavior
 

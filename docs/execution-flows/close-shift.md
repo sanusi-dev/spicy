@@ -37,12 +37,12 @@ Counted amount form
   -> HX home surface or redirect
 ```
 
-`submit_closing_entry()` recalculates the authoritative period end at submission. It includes submitted non-return orders in the period and computes expected values from opening balances plus payments minus cash change, minus submitted-return refunds, and minus submitted shift cash-outs in the period. It writes the frozen sales fields (`bill_count`, `total_quantity`, `net_total`, `grand_total`, `refunded_total`) and `total_short_excess`, marks the close submitted, and sets `opening_entry.closing_entry`.
+`submit_closing_entry()` recalculates the authoritative period end at submission. It includes submitted non-return orders in the period. It computes expected values from opening balances plus payments, minus cash change, minus submitted-return refunds, and minus submitted shift cash-outs in the period. It writes the frozen sales fields (`bill_count`, `total_quantity`, `net_total`, `grand_total`, `refunded_total`) and `total_short_excess`. It marks the close submitted and sets `opening_entry.closing_entry`.
 
 ## Rollback and Error Behavior
 
-The POST transaction rolls back model changes from the current request if an exception escapes. Invalid forms can nevertheless leave a committed draft closing entry because `ensure_closing_draft()` runs before bound-form validation finishes. A later retry reuses that draft.
+The POST transaction rolls back model changes from the current request if an exception escapes. Invalid forms can nevertheless leave a committed draft closing entry, because `ensure_closing_draft()` runs before bound-form validation finishes. A later retry reuses that draft.
 
 ## Backoffice Variant
 
-All `staff.views` shift pages are `@backoffice_required` (Manager/Admin only); cashiers use the POS route. `staff.views.closing_entry_create()` locks the open shift and creates/reuses a draft. `closing_entry_detail()` edits counted values. `closing_entry_submit()` calls `full_clean()` and the same closing service. `POSClosingEntry.cancel()` only cancels the close; it does not reopen the shift.
+All `staff.views` shift pages are `@backoffice_required` (Manager/Admin only). Cashiers use the POS route. `staff.views.closing_entry_create()` locks the open shift and creates/reuses a draft. `closing_entry_detail()` edits counted values. `closing_entry_submit()` calls `full_clean()` and the same closing service. `POSClosingEntry.cancel()` only cancels the close. It does not reopen the shift.

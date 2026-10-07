@@ -29,8 +29,8 @@ View icon
   -> Alpine orderDetailsDrawer opens, traps focus, restores focus on close
 ```
 
-The endpoint applies the same visibility rules as the history list: without full history it accepts only submitted, paid, non-return orders (any other primary key returns 404); managers and users with `Restaurant.pos_allow_full_history` can also open cancelled and discarded orders. It shows items, payments, totals, customer grouping, and ticket status.
+The endpoint applies the same visibility rules as the history list. Without full history it accepts only submitted, paid, non-return orders (any other primary key returns 404). Managers and users with `Restaurant.pos_allow_full_history` can also open cancelled and discarded orders. It shows items, payments, totals, customer grouping, and ticket status.
 
 ## Reprints and Ticket Retry
 
-Submitted order receipt reprint POSTs `pos_order_history_print`. Reprints follow the history-list visibility rules: without full history only submitted, paid, non-return orders can be reprinted; managers and `Restaurant.pos_allow_full_history` users can reprint any submitted receipt. Pending cancellation tickets and pending NEW_ORDER tickets on submitted orders use `pos_order_ticket_print` retry, with retry forms rendered in the detail header for each pending ticket. Ticket retry still requires an active shift, so a closed-shift history user can be redirected to the POS gate.
+Submitted order receipt reprint POSTs `pos_order_history_print`. Reprints follow the history-list visibility rules. Without full history, only submitted, paid, non-return orders can be reprinted. Managers and `Restaurant.pos_allow_full_history` users can reprint any submitted receipt. Pending cancellation tickets and pending NEW_ORDER tickets on submitted orders use `pos_order_ticket_print` retry, with retry forms rendered in the detail header for each pending ticket. Ticket retry still requires an active shift, so a closed-shift history user can be redirected to the POS gate.

@@ -13,11 +13,11 @@ Pay flow
   -> failure: warning "receipt failed to print" — reprint from order history
 ```
 
-Settlement *is* the receipt event: `settle_order()` marks the order printed on its guarded submit save, so no pre-payment receipt print exists and "receipt printed" implies "paid". The physical print runs *after* the settlement transaction — a printer failure never blocks or rolls back a sale.
+Settlement *is* the receipt event. `settle_order()` marks the order printed on its guarded submit save, so no pre-payment receipt print exists and "receipt printed" implies "paid". The physical print runs *after* the settlement transaction — a printer failure never blocks or rolls back a sale.
 
 ## Reprint from History
 
-`pos_order_history_print()` accepts submitted orders visible under the caller's history rules: without full history, submitted paid non-return orders only; managers and `Restaurant.pos_allow_full_history` users can reprint any submitted receipt. It calls the same print interface, does not change `invoice_printed` metadata, and can run without an active shift. The drawer is re-rendered by HTMX.
+`pos_order_history_print()` accepts submitted orders visible under the caller's history rules. Without full history, those are submitted paid non-return orders only. Managers and `Restaurant.pos_allow_full_history` users can reprint any submitted receipt. It calls the same print interface, does not change `invoice_printed` metadata, and can run without an active shift. The drawer is re-rendered by HTMX.
 
 ## Current Device Behavior
 
@@ -25,4 +25,4 @@ Settlement *is* the receipt event: `settle_order()` marks the order printed on i
 
 ## Failure Behavior Intended by the Interface
 
-If a future implementation returns `success=False`, the order stays settled and printed; only a warning is shown. Reprint is available from order history. If the implementation raises instead of returning `PrintResult`, the view does not catch it and the request propagates the exception.
+If a future implementation returns `success=False`, the order stays settled and printed. Only a warning is shown, and reprint is available from order history. If the implementation raises instead of returning `PrintResult`, the view does not catch it and the request propagates the exception.

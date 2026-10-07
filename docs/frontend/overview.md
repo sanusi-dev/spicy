@@ -43,7 +43,7 @@ flowchart TD
 
 ## Backoffice Frontend
 
-Most backoffice pages are full HTML responses extending `app_base.html`. HTMX is used selectively for staff role rows, destructive deletes, and inventory formset row add/remove. Alpine provides local select-driven visibility, compact filter popovers, and purpose-dependent form controls. Stock-entry, reconciliation, and purchase receipt submit/cancel actions use the shared confirmation dialog before posting or reversing a document. `searchable-select.js` initializes Tom Select on ordinary form selects after initial load and HTMX swaps.
+Most backoffice pages are full HTML responses extending `app_base.html`. HTMX is used selectively for staff role rows, destructive deletes, and inventory formset row add/remove. Alpine provides local select-driven visibility, compact filter popovers, and purpose-dependent form controls. Stock-entry, reconciliation, and purchase receipt submit/cancel actions use the shared confirmation dialog before posting or reversing a document. That dialog reads `data-confirm-*` attributes and renders them as text nodes. `searchable-select.js` initializes Tom Select on ordinary form selects after initial load and HTMX swaps.
 
 ## Asset Build
 
@@ -51,4 +51,4 @@ Most backoffice pages are full HTML responses extending `app_base.html`. HTMX is
 
 ## Frontend/Backend Authority
 
-Client-side previews calculate opening/closing totals and payment entered totals for immediate feedback. The server recalculates totals, checks shifts, stock, permissions, and state transitions. Disabled buttons and hidden controls are affordances, not authorization.
+Client-side previews calculate opening/closing totals and payment entered totals for immediate feedback. The server recalculates totals, checks shifts, stock, permissions, and state transitions. Disabled buttons and hidden controls are presentation only. They are affordances, never authorization.

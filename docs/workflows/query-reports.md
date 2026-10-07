@@ -10,7 +10,7 @@ Prefix: `/backoffice/reports/` (`reports` namespace).
 
 ## Sales period
 
-Sales reports filter `Order.posting_date` as a calendar date (the order's settlement date). Today is `posting_date = today`. The Daily P&L business-day window does not apply; a late-night ticket can land on different days on the two surfaces.
+Sales reports filter `Order.posting_date` as a calendar date (the order's settlement date). Today is `posting_date = today`. The Daily P&L business-day window does not apply. A late-night ticket can land on different days on the two surfaces.
 
 Source is `Order.status=SUBMITTED` only. `DRAFT`, `CANCELLED`, and `DISCARDED` never count as sales. Returns (`is_return=True`) net off on the return's own `posting_date` as negative `grand_total` / `OrderItem.amount`. Net = gross (item amounts) + `rounding_adjustment` (equivalently `Sum(rounded_total)`). Refunded is the absolute value of return `grand_total`.
 
@@ -31,19 +31,19 @@ Department columns come from `OrderItem.department` (FOOD / DRINKS — DB-constr
 | Average bill | `sales_average_bill` | Net / bill count per day or month, plus overall | from, to, grouping |
 | POS register | `pos_register` | One per submitted `POSClosingEntry` | from, to, cashier |
 
-Queries live in `apps/reports/sales_reports.py` (period, average bill, cancelled) and `apps/reports/sales_breakdown_reports.py` (item, employee, service, time). Every page is a filter form + table + totals row. Period, average-bill, and service rows link to the order register with status and date filters; cancelled invoice rows link to order detail. Register rows link to closing detail and expand to stored `ClosingPayment` expected/counted/difference (netting is displayed, not recomputed). No charts.
+Queries live in `apps/reports/sales_reports.py` (period, average bill, cancelled) and `apps/reports/sales_breakdown_reports.py` (item, employee, service, time). Every page is a filter form + table + totals row. Period, average-bill, and service rows link to the order register with status and date filters. Cancelled invoice rows link to order detail. Register rows link to closing detail and expand to stored `ClosingPayment` expected/counted/difference (netting is displayed as stored. It is never recomputed). No charts.
 
-Monthwise is fiscal year **or** from/to: custom dates win and clear the year selection, while choosing a year replaces stale dates with that year's bounds. On the GL and P&L reports a selected fiscal year clamps from/to into the year; dates that fall outside both bounds reset the report to the full year.
+Monthwise is fiscal year **or** from/to. Custom dates win and clear the year selection. Choosing a year replaces stale dates with that year's bounds. On the GL and P&L reports a selected fiscal year clamps from/to into the year. Dates that fall outside both bounds reset the report to the full year.
 
 ## Accounting reports
 
 | Report | URL name | Behaviour |
 |---|---|---|
-| General ledger | `gl_report` | Chronological `GLEntry` rows with debit, credit, running balance, voucher link, `is_cancelled` flag. Cancelled originals and reversals both display; a reversal is dated the cancellation day, so originals and their mirrors net only when the range covers both. Filters: fiscal year, from/to, account. Running balance appears only when an account is selected, seeded by a brought-forward row from earlier entries in the same fiscal year. |
+| General ledger | `gl_report` | Chronological `GLEntry` rows with debit, credit, running balance, voucher link, `is_cancelled` flag. Cancelled originals and reversals both display. A reversal is dated the cancellation day, so originals and their mirrors net only when the range covers both. Filters: fiscal year, from/to, account. Running balance appears only when an account is selected, seeded by a brought-forward row from earlier entries in the same fiscal year. |
 | Trial balance | `trial_balance` | Cumulative `posting_date <= to` within the fiscal year, opening entries included. One row per leaf account with a non-zero balance, grouped by `account_type`. Debit total equals credit total. |
-| Simple P&L | `simple_pnl` | Sums `report_type=PROFIT_AND_LOSS` entries by account. Food vs drinks sales split using production-unit income and sales-returns accounts, falling back to the restaurant default income/returns accounts when exactly one department has no unit account. Gross profit = total income. Net profit = income − expenses. Cancelled + reversals netted; reversals carry the cancellation date, so a range must cover both to net. No typed costs and no memos. |
+| Simple P&L | `simple_pnl` | Sums `report_type=PROFIT_AND_LOSS` entries by account. The food/drinks sales split uses production-unit income and sales-returns accounts. It falls back to the restaurant default income/returns accounts when exactly one department has no unit account. Gross profit = total income. Net profit = income − expenses. Cancelled and reversals netted. Reversals carry the cancellation date, so a range must cover both to net. No typed costs and no memos. |
 
-Queries live in `apps/reports/accounting_reports.py`. GL voucher links resolve Order, Journal Entry, Supplier Invoice, Supplier Payment, Purchase Receipt, Stock Entry, Stock Reconciliation, and Shift Cash-Out (to the related opening entry detail). There is no balance sheet.
+Queries live in `apps/reports/accounting_reports.py`. GL voucher links resolve Order, Journal Entry, Supplier Invoice, Supplier Payment, Purchase Receipt, Stock Entry, Stock Reconciliation, and Shift Cash-Out. The Cash-Out link opens the related opening entry detail. There is no balance sheet.
 
 This GL report is separate from the accounting GL *register* (`accounting:gl_entry_list`), which is a newest-first document list with CSV export.
 
