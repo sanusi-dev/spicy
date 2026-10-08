@@ -1,0 +1,11 @@
+{% comment %}Loading circle. spinner_alpine = an Alpine expression for x-show toggling; spinner_override = the full class list; otherwise default hidden + optional Tailwind display classes via spinner_extras.{% endcomment %}
+{% if spinner_alpine %}
+  <svg class="hidden h-4 w-4 animate-spin" x-show="{{ spinner_alpine }}" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
+{% elif spinner_override %}
+  <svg class="{{ spinner_override }}" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+{% else %}
+  <svg class="hidden h-4 w-4 animate-spin {{ spinner_extras }}" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+{% endif %}
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+</svg>

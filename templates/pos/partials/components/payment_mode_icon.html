@@ -1,0 +1,12 @@
+{% comment %}Payment-mode tile icon. Include with mode=<a ModeOfPayment>.{% endcomment %}
+<span class="flex size-10 shrink-0 items-center justify-center rounded-xl {% if mode.type == 'CASH' %}bg-emerald-50 text-emerald-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+  {% if mode.type == "CASH" %}
+    {% hgi_stroke name="cash-01" size="20" color="currentColor" stroke_width="2" %}
+  {% elif mode.type == "BANK" %}
+    {% hgi_stroke name="bank" size="20" color="currentColor" stroke_width="2" %}
+  {% elif mode.type == "PHONE" %}
+    {% hgi_stroke name="smart-phone-03" size="20" color="currentColor" stroke_width="2" %}
+  {% else %}
+    {% hgi_stroke name="credit-card-pos" size="20" color="currentColor" stroke_width="2" %}
+  {% endif %}
+</span>
