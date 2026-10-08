@@ -17,11 +17,12 @@ from apps.inventory.models import (
     StockReconciliationItem,
     Warehouse,
 )
-from apps.inventory.services import compute_food_usage, recipe_plate_cost, submit_stock_reconciliation
+from apps.inventory.services import submit_stock_reconciliation
 from apps.menu.models import Menu, MenuItem
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import add_order_line, settle_order
 from apps.payments.models import ModeOfPayment, PaymentGLMapping
+from apps.reports.food_usage import compute_food_usage, recipe_plate_cost
 from apps.settings.models import ProductionUnit, Restaurant
 from apps.staff.models import OpeningPayment, POSOpeningEntry
 from apps.users.models import CustomUser

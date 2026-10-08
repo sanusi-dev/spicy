@@ -2,7 +2,7 @@
 
 ## Domain Objects
 
-`POSOpeningEntry` is the global shift parent. `OpeningPayment` stores one opening balance per enabled payment mode. `POSClosingEntry` is a one-to-one close document. `ClosingPayment` stores counted, expected, and difference values. The opening remains `SUBMITTED` after close. `closing_entry_id` determines whether it is open or closed.
+`POSOpeningEntry` is the global shift parent. `OpeningPayment` stores one opening balance per enabled payment mode. `POSClosingEntry` is a one-to-one close document. `ClosingPayment` stores counted, expected, and difference values. The opening remains `SUBMITTED` after close. `closing_entry_id` determines whether it is open or closed. Child rows freeze with their document at the ORM layer: `OpeningPayment` saves/deletes are rejected once the shift opens, `ClosingPayment` saves/deletes once the close leaves `DRAFT`, and `POSClosingEntry.save()` rejects writes to a submitted or cancelled close unless the close service sets its transition flags. The four shift-document admin registrations are view-only.
 
 ## Opening
 
@@ -18,7 +18,7 @@ All backoffice shift pages (`apps/staff/views.py`) are `@backoffice_required`. O
 
 `staff.views.opening_entry_create()` and `_save_opening_entry()` create a draft and bulk-create `OpeningPayment` rows. `opening_entry_detail()` lets a draft be edited by replacing its child rows. `opening_entry_submit()` calls `full_clean()` and then `entry.submit()`.
 
-⚠️ Requires verification: the backoffice create path does not call `staff.services.open_shift()` and can therefore bypass that service's explicit "Restaurant settings exist" check. The model submit path still enforces the one-open-shift rule.
+The backoffice draft writer (`_save_opening_entry()`) refuses to save when `Restaurant.load()` returns nothing, and `POSOpeningEntry.submit()` raises the same "Restaurant settings are not configured." error after the Restaurant row lock. Both routes require settings.
 
 ## Open Shift Rules
 
@@ -30,7 +30,7 @@ All backoffice shift pages (`apps/staff/views.py`) are `@backoffice_required`. O
 
 ## Closing
 
-POS GET `/pos/close-shift/` computes expected values without creating database rows. The view first checks that the requester opened the shift or is a Manager/Admin. Other cashiers are sent back to POS home with an error. If open drafts exist, it renders a blocking page. POS POST locks the opening row, rechecks drafts, and creates or reuses a closing draft. It saves counted amounts and updates the period end. It then calls `submit_closing_entry()`, which re-checks the same ownership rule against the actor.
+POS GET `/pos/close-shift/` computes expected values without creating database rows. The view first checks that the requester opened the shift or is a Manager/Admin. Other cashiers are sent back to POS home with an error. If open drafts exist, it renders a blocking page. When the shift has cancelled-after-send orders, the close surface shows a red review block listing them (number, reason, amount) with an "I reviewed these cancellations" checkbox. POS POST locks the opening row, rechecks drafts, and creates or reuses a closing draft. It saves counted amounts, the `variance_note`, and updates the period end. It refuses submission while the review checkbox is unticked, then calls `submit_closing_entry()`, which re-checks the same ownership rule against the actor.
 
 Backoffice `closing_entry_create()` locks the open shift to prevent duplicate closing drafts. The detail page edits draft counted amounts. Both POS and backoffice ultimately call the same closing service. The backoffice pages are manager/admin-only.
 
@@ -44,13 +44,13 @@ Backoffice `closing_entry_create()` locks the open shift to prevent duplicate cl
 6. Computes expected per-mode amounts as opening float plus order payments, less cash change, less submitted-return refunds, and less submitted cash-outs per mode.
 7. Validates counted amounts. Each must be non-negative. A non-cash mode's counted amount may not exceed its expected amount. An electronic total above what was processed is a bad count, and it is not drawer money. Cash surpluses are allowed and flow into the variance gate.
 8. Stores closing differences as `closing_amount - expected_amount`.
-9. Applies the variance approval gate: when the absolute `total_short_excess` exceeds `Restaurant.variance_approval_threshold`, a non-empty `variance_note` and a Manager/Admin actor are required.
+9. Applies the variance approval gate: when the absolute `total_short_excess` exceeds `Restaurant.variance_approval_threshold`, a non-empty `variance_note` and a Manager/Admin actor are required. The POS close form carries the note field itself, plus a server-derived banner showing the threshold, so an above-threshold close is possible from the POS.
 10. Submits the closing and links it to the opening.
 11. Posts the cash variance. When any `ClosingPayment.difference` is non-zero, `accounting.services.post_cash_variance_gl` creates and submits a balanced JournalEntry. One leg per affected payment mode. Each mode's own mapped account (cash or bank) takes its drawer's difference, netting against the shortage/over-short accounts. The journal links via `POSClosingEntry.variance_journal_entry`. The close fails closed. When the account matching an existing variance sign (`cash_shortage_account` / `cash_over_short_account`) is unconfigured, submission is rejected with an error. The close does not finish with the variance unposted.
 
 Returns are excluded from drawer totals. Cancelled orders are excluded through `submitted_in_shift()`.
 
-The closing detail page shows the five stored sales figures (Bills, Item qty, Net total, Grand total, Refunded total). The list shows Net sales (`grand_total`). Cancelling a close does not touch the stored sales fields. A re-submit recomputes them.
+The closing detail page shows the five stored sales figures (Bills, Item qty, Net total, Grand total, Refunded total) plus a "Cancelled after send" count for the shift. The list shows Net sales (`grand_total`). Cancelling a close does not touch the stored sales fields. A re-submit recomputes them.
 
 ## Shift cash-outs
 

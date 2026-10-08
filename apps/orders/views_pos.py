@@ -495,6 +495,12 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
     period_start = shift.period_start_date
     period_end = timezone.now()
     expected_rows = expected_closing_amounts(shift, period_start, period_end)
+    variance_threshold = Restaurant.load().variance_approval_threshold
+    cancelled_orders = list(
+        Order.objects.cancelled_in_shift(shift)
+        .only("order_number", "cancel_reason", "grand_total")
+        .order_by("updated_at")
+    )
 
     if request.method == "POST":
         with transaction.atomic():
@@ -527,22 +533,31 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
                     )
                 )
             if all(form.is_valid() for _payment, form in form_data):
-                try:
-                    for payment, form in form_data:
-                        form.save()
-                        payment.save(update_fields=["opening_amount", "expected_amount", "updated_at"])
-                    closing.remarks = str(request.POST.get("remarks", "")).strip()
-                    closing.period_end_date = timezone.now()
-                    closing.save(update_fields=["remarks", "period_end_date", "updated_at"])
-                    closing.full_clean()
-                    submit_closing_entry(closing, actor=request.user)
-                except ValidationError as exc:
-                    messages.error(request, exc.messages[0] if exc.messages else "Cannot close the shift.")
+                review_count = len(cancelled_orders)
+                if review_count and not request.POST.get("cancelled_orders_ack"):
+                    messages.error(
+                        request,
+                        f"{review_count} order{'s were' if review_count != 1 else ' was'} cancelled after being "
+                        "sent. Tick the review confirmation before closing.",
+                    )
                 else:
-                    messages.success(request, "Shift closed successfully.")
-                    if _is_htmx(request):
-                        return _home_or_redirect(request)
-                    return redirect("pos:pos_home")
+                    try:
+                        for payment, form in form_data:
+                            form.save()
+                            payment.save(update_fields=["opening_amount", "expected_amount", "updated_at"])
+                        closing.remarks = str(request.POST.get("remarks", "")).strip()
+                        closing.variance_note = str(request.POST.get("variance_note", "")).strip()
+                        closing.period_end_date = timezone.now()
+                        closing.save(update_fields=["remarks", "variance_note", "period_end_date", "updated_at"])
+                        closing.full_clean()
+                        submit_closing_entry(closing, actor=request.user)
+                    except ValidationError as exc:
+                        messages.error(request, exc.messages[0] if exc.messages else "Cannot close the shift.")
+                    else:
+                        messages.success(request, "Shift closed successfully.")
+                        if _is_htmx(request):
+                            return _home_or_redirect(request)
+                        return redirect("pos:pos_home")
             display_closing = closing
             display_payments = [payment for payment, _form in form_data]
         cash_out_ctx = _cash_out_context(request, shift)
@@ -555,6 +570,8 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
                 "total_expected": sum((payment.expected_amount for payment in display_payments), Decimal("0")),
                 "draft_count": 0,
                 "shift": shift,
+                "variance_threshold": variance_threshold,
+                "cancelled_orders": cancelled_orders,
                 "show_order_tabs": _is_htmx(request),
                 "pos_nav": "close",
                 **cash_out_ctx,
@@ -575,17 +592,14 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
     form_data = []
     display_payments = []
     for row in expected_rows:
-        payment = existing_by_mode.get(row["mode"].pk)
-        if payment is None:
-            payment = ClosingPayment(
-                mode_of_payment=row["mode"],
-                opening_amount=row["opening_amount"],
-                expected_amount=row["expected_amount"],
-                closing_amount=Decimal("0"),
-            )
-        else:
-            payment.opening_amount = row["opening_amount"]
-            payment.expected_amount = row["expected_amount"]
+        payment = existing_by_mode.get(row["mode"].pk) or ClosingPayment(
+            mode_of_payment=row["mode"],
+            opening_amount=row["opening_amount"],
+            expected_amount=row["expected_amount"],
+            closing_amount=Decimal("0"),
+        )
+        payment.opening_amount = row["opening_amount"]
+        payment.expected_amount = row["expected_amount"]
         display_payments.append(payment)
         form_data.append(
             (
@@ -602,6 +616,7 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
         period_start_date = period_start
         opening_entry = shift
         remarks = existing_draft.remarks if existing_draft is not None else ""
+        variance_note = existing_draft.variance_note if existing_draft is not None else ""
 
     return _render_pos_surface(
         request,
@@ -612,6 +627,8 @@ def pos_close_shift(request: HttpRequest) -> HttpResponse:
             "total_expected": sum((payment.expected_amount for payment in display_payments), Decimal("0")),
             "draft_count": 0,
             "shift": shift,
+            "variance_threshold": variance_threshold,
+            "cancelled_orders": cancelled_orders,
             "show_order_tabs": _is_htmx(request),
             "pos_nav": "close",
             **_cash_out_context(request, shift),
@@ -858,6 +875,8 @@ def pos_order_update_meta(request: HttpRequest, pk: int) -> HttpResponse:
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
+    error = None
+    guest_count = None
     with transaction.atomic():
         order = get_object_or_404(
             Order.objects.select_for_update().open_drafts_for(shift, request.user),
@@ -872,7 +891,9 @@ def pos_order_update_meta(request: HttpRequest, pk: int) -> HttpResponse:
                 actor=request.user,
             )
         except ValidationError as e:
-            return _render_cart(request, order, error=e.messages[0] if e.messages else "Cannot update the order.")
+            error = e.messages[0] if e.messages else "Cannot update the order."
+    if error:
+        return _render_cart(request, order, error=error)
     active = _get_active_card(request, order)
     if active > guest_count:
         cards = request.session.get(SESSION_CARD_KEY, {})
@@ -887,6 +908,7 @@ def pos_order_update_meta(request: HttpRequest, pk: int) -> HttpResponse:
 def pos_order_add_item(request: HttpRequest, pk: int) -> HttpResponse:
     """Add an item to the active customer card. Returns the cart partial."""
     error = None
+    add_on_dialog = None
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
@@ -958,24 +980,16 @@ def pos_order_add_item(request: HttpRequest, pk: int) -> HttpResponse:
                 if variant_menu_item is None:
                     error = "That size is not on the active menu."
                 elif variant_add_ons and not selected_add_on_ids and not request.POST.get("variant_confirmed"):
-                    response = render(
-                        request,
-                        "pos/partials/catalog/add_on_dialog.html",
-                        {
-                            "order": order,
-                            "menu_item": variant_menu_item,
-                            "add_ons": variant_add_ons,
-                            "preset_qty": qty,
-                            "preset_comments": comments,
-                            "variant_confirmed": True,
-                        },
-                    )
-                    response["HX-Retarget"] = "#add-on-dialog-container"
-                    response["HX-Reswap"] = "innerHTML"
-                    response["HX-Trigger"] = "close-variant-dialog"
-                    return response
+                    add_on_dialog = {
+                        "order": order,
+                        "menu_item": variant_menu_item,
+                        "add_ons": variant_add_ons,
+                        "preset_qty": qty,
+                        "preset_comments": comments,
+                        "variant_confirmed": True,
+                    }
 
-            if not error and item is not None:
+            if not error and item is not None and add_on_dialog is None:
                 try:
                     active_card = _get_active_card(request, order)
                     line_item = variant if variant is not None else item
@@ -995,6 +1009,13 @@ def pos_order_add_item(request: HttpRequest, pk: int) -> HttpResponse:
                 except ValidationError as e:
                     error = e.messages[0] if e.messages else "Unable to add that item."
 
+    if add_on_dialog is not None:
+        response = render(request, "pos/partials/catalog/add_on_dialog.html", add_on_dialog)
+        response["HX-Retarget"] = "#catalog-dialog-container"
+        response["HX-Reswap"] = "innerHTML"
+        response["HX-Trigger"] = "close-variant-dialog"
+        return response
+
     response = _render_cart(request, order, error=error, catalog_oob=not error)
     if not error and request.headers.get("HX-Request"):
         response["HX-Trigger"] = "close-add-on-dialog"
@@ -1008,6 +1029,7 @@ def pos_order_update_item(request: HttpRequest, pk: int, item_pk: int) -> HttpRe
     shift = _get_open_shift()
     if shift is None:
         return redirect("pos:pos_home")
+    error = None
     with transaction.atomic():
         order = get_object_or_404(
             Order.objects.select_for_update().open_drafts_for(shift, request.user),
@@ -1022,7 +1044,9 @@ def pos_order_update_item(request: HttpRequest, pk: int, item_pk: int) -> HttpRe
                 actor=request.user,
             )
         except ValidationError as e:
-            return _render_cart(request, order, error=e.messages[0] if e.messages else "Invalid item update.")
+            error = e.messages[0] if e.messages else "Invalid item update."
+    if error:
+        return _render_cart(request, order, error=error)
     return _render_cart(request, order, catalog_oob=True)
 
 
@@ -1130,23 +1154,30 @@ def pos_order_settle(request: HttpRequest, pk: int) -> HttpResponse:
             return redirect("pos:pos_order_screen", pk=order.pk)
 
         try:
-            services.settle_order(order, payments_data, cashier=request.user, opening_entry=shift)
+            tickets = services.settle_order(order, payments_data, cashier=request.user, opening_entry=shift)
         except ValidationError as e:
             messages.error(request, str(e.messages[0]) if e.messages else "Settle failed.")
             return redirect("pos:pos_order_screen", pk=order.pk)
 
+        print_failures = services.dispatch_tickets(tickets)
         cards = request.session.get(SESSION_CARD_KEY, {})
         if isinstance(cards, dict):
             cards.pop(str(order.pk), None)
             request.session[SESSION_CARD_KEY] = cards
         messages.success(request, f"Order {order.invoice_number} settled.")
+        if print_failures:
+            failed = ", ".join(sorted(set(print_failures)))
+            messages.warning(
+                request,
+                f"Tickets created, but {failed} printing failed. Retry from order history.",
+            )
         if not printing.print_receipt(order).success:
             messages.warning(request, "The receipt failed to print — reprint it from order history.")
         return redirect("pos:pos_home")
 
     return render(
         request,
-        "pos/index.html#payment_dialog",
+        "pos/partials/payment/dialog.html",
         {
             "order": order,
             "payment_modes": list(_get_settle_payment_modes()),

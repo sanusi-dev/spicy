@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.inventory.models import Item
 from apps.payments.models import ModeOfPayment
+from apps.utils.departments import department_rule_breach
 from apps.utils.models import BaseModel
 from apps.utils.rounding import cash_round, money
 
@@ -88,6 +89,10 @@ class OrderQuerySet(models.QuerySet):
             submitted_at__lte=period_end,
         )
 
+    def cancelled_in_shift(self, shift):
+        """Sent orders cancelled on this shift (kitchen already received a ticket)."""
+        return self.filter(opening_entry=shift, status=CANCELLED, is_return=False)
+
 
 class OrderSequence(BaseModel):
     """Persistent counter for sequential order numbers, one row per series."""
@@ -101,6 +106,9 @@ class OrderSequence(BaseModel):
 
 class Order(BaseModel):
     """A POS order — the single source of truth for items, payments, and status."""
+
+    # Service-only transition flag: set around settlement's payment writes, cleared on exit.
+    _settling = False
 
     objects = OrderQuerySet.as_manager()
 
@@ -325,26 +333,18 @@ class Order(BaseModel):
         """Validate that the item is sellable on the POS for its department."""
         if item.disabled or not item.is_sales_item:
             raise ValidationError("That menu item is no longer available.")
-        if item.department == "DRINKS":
-            if not (item.is_stock_item and item.is_sales_item and item.is_purchase_item):
-                raise ValidationError(f"{item.item_name} must be a stock-tracked, sellable, purchasable drink.")
-        elif item.department == "FOOD" and item.is_sales_item and (item.is_stock_item or item.is_purchase_item):
-            raise ValidationError(
-                f"{item.item_name} is a sellable food item and must not be stock-tracked or purchasable."
-            )
+        breach = department_rule_breach(item)
+        if breach:
+            raise ValidationError(breach)
 
     def _validate_order_line_availability(self, line):
         """Reject lines whose Item or MenuItem is no longer sellable."""
         item = line.item
         if item.disabled or not item.is_sales_item:
             raise ValidationError(f"{line.item_name} is no longer available.")
-        if item.department == "DRINKS":
-            if not (item.is_stock_item and item.is_sales_item and item.is_purchase_item):
-                raise ValidationError(f"{line.item_name} must be a stock-tracked, sellable, purchasable drink.")
-        elif item.department == "FOOD" and item.is_sales_item and (item.is_stock_item or item.is_purchase_item):
-            raise ValidationError(
-                f"{line.item_name} is a sellable food item and must not be stock-tracked or purchasable."
-            )
+        breach = department_rule_breach(item)
+        if breach:
+            raise ValidationError(breach)
         menu_item = line.menu_item
         if menu_item is not None and menu_item.disabled:
             raise ValidationError(f"{line.item_name} is no longer available on the active menu.")

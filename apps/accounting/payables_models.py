@@ -34,7 +34,9 @@ class Supplier(BaseModel):
         blank=True,
         related_name="+",
         verbose_name="Payable account",
-        help_text="The account used to track what you owe this supplier. Leave blank to use the default payable account.",
+        help_text=(
+            "The account used to track what you owe this supplier. Leave blank to use the default payable account."
+        ),
     )
     is_default = models.BooleanField(default=False)
     disabled = models.BooleanField(default=False)

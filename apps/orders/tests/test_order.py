@@ -72,6 +72,10 @@ class OrderTestBase(OrderAccountingMixin, TestCase):
         cls.restaurant.default_warehouse = cls.warehouse
         cls.restaurant.save()
         cls._setup_accounting()
+        cls.bank, _ = ModeOfPayment.objects.get_or_create(name="Bank", defaults={"type": "BANK"})
+        PaymentGLMapping.objects.get_or_create(
+            mode_of_payment=cls.bank, defaults={"default_account": cls.accounts["bank"]}
+        )
         cls.user = CustomUser.objects.create_user(username="cashier", password="testpass123")
         cls.sequence, _ = OrderSequence.objects.get_or_create(name="order", defaults={"current_value": 0})
         cls.opening = POSOpeningEntry.objects.create(cashier=cls.user)
@@ -79,6 +83,11 @@ class OrderTestBase(OrderAccountingMixin, TestCase):
             opening_entry=cls.opening,
             mode_of_payment=cls.cash,
             opening_amount=Decimal("50000"),
+        )
+        OpeningPayment.objects.create(
+            opening_entry=cls.opening,
+            mode_of_payment=cls.bank,
+            opening_amount=Decimal("0"),
         )
         cls.opening.submit()
         cls.kitchen = ProductionUnit.objects.create(name="Kitchen", warehouse=cls.warehouse, department="FOOD")
@@ -263,16 +272,9 @@ class OrderSettleTest(OrderTestBase):
         add_order_line(self.order, self.item, qty=2, rate=Decimal("1500"))
 
     def _add_bank_mode(self):
-        bank, _ = ModeOfPayment.objects.get_or_create(name="Bank", defaults={"type": "BANK"})
-        PaymentGLMapping.objects.get_or_create(
-            mode_of_payment=bank, defaults={"default_account": self.accounts["bank"]}
-        )
-        OpeningPayment.objects.get_or_create(
-            opening_entry=self.opening,
-            mode_of_payment=bank,
-            defaults={"opening_amount": Decimal("0")},
-        )
-        return bank
+        # Declared with the opening balance in the base fixture; declared-at-open rows
+        # cannot change after the shift opens.
+        return self.bank
 
     def test_settle_changes_status(self):
         settle_order(self.order, [{"mode_of_payment": self.cash.pk, "amount": "3000"}])
@@ -664,7 +666,7 @@ class OrderPaymentValidationTest(OrderTestBase):
 
     def test_missing_reference_rejected_on_normal_order_when_required(self):
         order = self._create_order()
-        bank = ModeOfPayment.objects.create(name="Bank", type="BANK")
+        bank = self.bank
         Restaurant.objects.update(require_payment_reference=True)
 
         with self.assertRaisesMessage(ValidationError, "A reference is required for Bank payments."):
@@ -673,7 +675,7 @@ class OrderPaymentValidationTest(OrderTestBase):
     def test_missing_reference_allowed_on_return_draft_when_required(self):
         source = self._create_order()
         return_order = Order.objects.create(opening_entry=self.opening, is_return=True, return_against=source)
-        bank = ModeOfPayment.objects.create(name="Bank", type="BANK")
+        bank = self.bank
         Restaurant.objects.update(require_payment_reference=True)
 
         payment = OrderPayment.objects.create(

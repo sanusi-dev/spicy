@@ -1,28 +1,8 @@
+import { trapFocusInPanel } from './focus';
+
 document.addEventListener('alpine:init', () => {
-  const FOCUSABLE =
-    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
   const ENTER_MS = 200;
   const LEAVE_MS = 150;
-
-  function trapFocusInPanel(panel, event) {
-    if (event.key !== 'Tab' || !panel) {
-      return;
-    }
-    const focusable = Array.from(panel.querySelectorAll(FOCUSABLE));
-    if (!focusable.length) {
-      event.preventDefault();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   function afterPaint(callback) {
     // Two rAFs so the off-screen enter-start paints before we open.
@@ -76,41 +56,4 @@ document.addEventListener('alpine:init', () => {
       },
     };
   });
-
-  Alpine.data('posModalDialog', (options = {}) => ({
-    open: true,
-    closeUrl: options.closeUrl || '',
-    removeOnClose: Boolean(options.removeOnClose),
-    selected: options.selected || [],
-    previousFocus: null,
-
-    init() {
-      this.previousFocus = document.activeElement;
-      this.$nextTick(() => {
-        const focusTarget = this.$refs.closeButton || this.$refs.panel?.querySelector(FOCUSABLE);
-        focusTarget?.focus();
-      });
-    },
-
-    close() {
-      if (!this.open) {
-        return;
-      }
-      this.open = false;
-      if (this.closeUrl) {
-        window.location.href = this.closeUrl;
-        return;
-      }
-      if (this.removeOnClose) {
-        this.$root.remove();
-      }
-      if (this.previousFocus && typeof this.previousFocus.focus === 'function') {
-        this.previousFocus.focus();
-      }
-    },
-
-    trapFocus(event) {
-      trapFocusInPanel(this.$refs.panel, event);
-    },
-  }));
 });

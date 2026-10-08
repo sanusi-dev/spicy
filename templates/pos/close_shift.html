@@ -8,7 +8,6 @@
        totalExpected: Number('{{ total_expected|default:0|escapejs }}'),
        totalCounted: 0,
        processing: false,
-       money(value) { return '₦' + Number(value || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
        recalc() { this.totalCounted = Array.from(this.$el.querySelectorAll('[data-counted]')).reduce((sum, input) => sum + (Number(input.value) || 0), 0); }
      }"
      x-init="$nextTick(() => recalc())"
@@ -31,6 +30,24 @@
     {% else %}
       <form method="post" action="{% url 'pos:pos_close_shift' %}" hx-post="{% url 'pos:pos_close_shift' %}" hx-target="#pos-main" hx-swap="innerHTML" hx-push-url="true" @submit="processing = true" class="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/8 ring-1 ring-slate-200/80">
         {% csrf_token %}
+        {% if cancelled_orders %}
+          <div class="mx-5 mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 sm:mx-6">
+            <p class="font-bold">{{ cancelled_orders|length }} order{{ cancelled_orders|length|pluralize }} cancelled after being sent to the kitchen</p>
+            <ul class="mt-2 divide-y divide-rose-100">
+              {% for order in cancelled_orders %}
+                <li class="flex items-center justify-between gap-3 py-1.5">
+                  <span class="font-mono text-xs font-bold">#{{ order.order_number|default:order.pk }}</span>
+                  <span class="min-w-0 flex-1 truncate text-xs">{{ order.get_cancel_reason_display }}</span>
+                  <span class="font-mono text-xs font-bold tabular-nums">₦{{ order.grand_total|floatformat:2|intcomma }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+            <label class="mt-3 flex items-center gap-2 font-semibold">
+              <input type="checkbox" name="cancelled_orders_ack" class="size-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500/30 focus:outline-none" />
+              I reviewed these cancellations
+            </label>
+          </div>
+        {% endif %}
         <div class="border-b border-slate-100 px-5 py-5 sm:px-6">
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -47,17 +64,7 @@
           {% for payment, form in form_data %}
             <div class="px-5 py-4 sm:px-6" x-data="{ expected: Number('{{ payment.expected_amount|escapejs }}'), counted: Number('{{ form.closing_amount.value|default:0|escapejs }}') }">
               <div class="flex items-center gap-3">
-                <span class="flex size-10 shrink-0 items-center justify-center rounded-xl {% if payment.mode_of_payment.type == 'CASH' %}bg-emerald-50 text-emerald-700{% else %}bg-slate-100 text-slate-600{% endif %}">
-                  {% if payment.mode_of_payment.type == "CASH" %}
-                    {% hgi_stroke name="cash-01" size="20" color="currentColor" stroke_width="2" %}
-                  {% elif payment.mode_of_payment.type == "BANK" %}
-                    {% hgi_stroke name="bank" size="20" color="currentColor" stroke_width="2" %}
-                  {% elif payment.mode_of_payment.type == "PHONE" %}
-                    {% hgi_stroke name="smart-phone-03" size="20" color="currentColor" stroke_width="2" %}
-                  {% else %}
-                    {% hgi_stroke name="credit-card-pos" size="20" color="currentColor" stroke_width="2" %}
-                  {% endif %}
-                </span>
+              {% include "pos/partials/components/payment_mode_icon.html" with mode=payment.mode_of_payment %}
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-bold text-slate-900">{{ payment.mode_of_payment.name }}</p>
                   <p class="mt-0.5 text-xs text-slate-400">
@@ -75,7 +82,7 @@
               </div>
               <div class="mt-2.5 flex items-center justify-end gap-2 pl-[3.25rem]">
                 <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Diff</span>
-                <span class="rounded-lg px-2 py-0.5 font-mono text-xs font-bold tabular-nums" :class="counted - expected === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'" x-text="money(counted - expected)"></span>
+                <span class="rounded-lg px-2 py-0.5 font-mono text-xs font-bold tabular-nums" :class="counted - expected === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'" x-text="$money(counted - expected)"></span>
               </div>
               {% if form.errors %}<p class="mt-1.5 pl-[3.25rem] text-xs font-semibold text-rose-600">{{ form.errors|striptags }}</p>{% endif %}
             </div>
@@ -86,16 +93,31 @@
         <div class="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
           <div>
             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Total Expected</p>
-            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums text-slate-700" x-text="money(totalExpected)"></p>
+            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums text-slate-700" x-text="$money(totalExpected)"></p>
           </div>
           <div>
             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Counted</p>
-            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums text-slate-900" x-text="money(totalCounted)"></p>
+            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums text-slate-900" x-text="$money(totalCounted)"></p>
           </div>
           <div class="text-right">
             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Variance</p>
-            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums" :class="totalCounted - totalExpected === 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="money(totalCounted - totalExpected)"></p>
+            <p class="mt-0.5 font-mono text-sm font-extrabold tabular-nums" :class="totalCounted - totalExpected === 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="$money(totalCounted - totalExpected)"></p>
           </div>
+        </div>
+        {% if variance_threshold is not None %}
+          <div class="mx-5 mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900 sm:mx-6">
+            A cash variance above ₦{{ variance_threshold|floatformat:2|intcomma }} needs a manager's variance note before the shift can close.
+          </div>
+        {% endif %}
+        <div class="px-5 py-4 sm:px-6">
+          <label for="variance_note" class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Variance note</label>
+          <textarea
+            id="variance_note"
+            name="variance_note"
+            rows="2"
+            placeholder="Required when the variance exceeds the approval threshold"
+            class="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+          >{{ closing.variance_note|default:'' }}</textarea>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-slate-100 p-4 sm:flex-row sm:justify-between sm:p-5">
           <a href="{% url 'pos:pos_home' %}" hx-get="{% url 'pos:pos_home' %}" hx-target="#pos-main" hx-swap="innerHTML" hx-push-url="true" class="inline-flex min-h-11 items-center justify-center rounded-xl px-5 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300/60">Cancel</a>

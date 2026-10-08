@@ -39,7 +39,7 @@ class TestRoleBasedRedirects(TestViewBase):
     def test_cashier_redirects_to_pos(self):
         user = self._make_user(username="test_cashier", groups=[self.cashier_group])
         response = self._login_and_follow_redirect(user)
-        self.assertRedirects(response, reverse("web:pos_index"))
+        self.assertRedirects(response, reverse("pos:pos_home"))
 
     def test_superuser_redirects_to_dashboard(self):
         user = self._make_user(username="test_superuser", is_superuser=True)
@@ -98,7 +98,7 @@ class TestPOSView(TestLoginRequiredViewBase):
     def test_no_role_user_gets_403_on_pos(self):
         CustomUser.objects.create_user(username="norole403@example.com", password="12345")
         self.client.login(username="norole403@example.com", password="12345")
-        response = self.client.get(reverse("web:pos_index"))
+        response = self.client.get(reverse("pos:pos_home"))
         self.assertEqual(response.status_code, 403)
 
 

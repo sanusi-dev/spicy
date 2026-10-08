@@ -17,9 +17,9 @@ There is no pre-payment receipt print. `settle_order()` marks `invoice_printed`,
 
 `create_tickets()` creates KOT/BOT rows with `print_status=PENDING`. `dispatch_tickets()` processes each ticket in its own transaction, locking the row, calling `print_ticket()`, and changing status to `PRINTED` only on success. Failure leaves the ticket pending for retry.
 
-Food routes to the FOOD ProductionUnit. Drinks route to DRINKS. Cancellation creates a new cancellation ticket per station, while original tickets become cancelled. Cancellation-ticket printing can fail independently after order cancellation has committed.
+Food routes to the FOOD ProductionUnit, drinks to DRINKS; `_ticket_type_for_department` raises on a NULL or unknown department instead of silently defaulting to the bar station. Cancellation creates a new cancellation ticket per station, while original tickets become cancelled. Cancellation-ticket printing can fail independently after order cancellation has committed.
 
-`settle_order()` guarantees ticket records. When a settling order has no KOTs, it plans tickets with the same departmental routing (`_plan_tickets`). It builds NEW_ORDER snapshots (`_build_ticket_snapshots`). It then dispatches them inside the settlement transaction. Print failure never blocks settlement — the ticket stays `PENDING` for retry.
+`settle_order()` guarantees ticket records. When a settling order has no KOTs, it plans tickets with the same departmental routing (`_plan_tickets`). It builds NEW_ORDER snapshots (`_build_ticket_snapshots`) inside the settlement transaction and returns them. `pos_order_settle()` calls `dispatch_tickets()` after the settlement commits, exactly as the Send flow does. Print failure never blocks settlement — the ticket stays `PENDING` for retry, and the cashier sees a warning naming the stations that failed. The seed command dispatches the tickets its settled orders create.
 
 ## Retry and Reprint
 

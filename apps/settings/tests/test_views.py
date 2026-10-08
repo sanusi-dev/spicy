@@ -1,9 +1,10 @@
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from apps.inventory.models import Warehouse
 from apps.settings.models import ProductionUnit, Restaurant
+from apps.settings.views import _role_change_error
 from apps.users.models import CustomUser
 
 
@@ -180,7 +181,7 @@ class TestStaffManagementViews(TestCase):
         self.assertNotContains(response, "newbie@test.com")
 
     def test_staff_confirm_message_keeps_display_name_as_text(self):
-        payload = '<img src=x onerror=alert(1)>'
+        payload = "<img src=x onerror=alert(1)>"
         self.cashier.first_name = payload
         self.cashier.last_name = ""
         self.cashier.save()
@@ -192,3 +193,47 @@ class TestStaffManagementViews(TestCase):
         self.assertNotContains(response, payload)
         self.assertNotContains(response, "<strong>")
         self.assertContains(response, "from Cashier to Manager?")
+
+    def test_assign_unknown_role_changes_nothing(self):
+        response = self.client.post(
+            reverse("settings:staff_assign_role", kwargs={"pk": self.newbie.pk, "role": "boss"})
+        )
+        self.assertRedirects(response, reverse("settings:staff_list"))
+        self.newbie.refresh_from_db()
+        self.assertEqual(self.newbie.groups.count(), 0)
+
+    def test_cannot_change_own_role(self):
+        response = self.client.post(
+            reverse("settings:staff_assign_role", kwargs={"pk": self.admin_user.pk, "role": "manager"})
+        )
+        self.assertRedirects(response, reverse("settings:staff_list"))
+        self.admin_user.refresh_from_db()
+        self.assertTrue(self.admin_user.is_superuser)
+        self.assertFalse(self.admin_user.groups.filter(name="Spicy Manager").exists())
+
+    def test_demoting_another_admin_is_allowed_when_two_admins_exist(self):
+        other = CustomUser.objects.create_superuser(
+            username="second@test.com", password="testpass123", email="second@test.com"
+        )
+        response = self.client.post(reverse("settings:staff_assign_role", kwargs={"pk": other.pk, "role": "manager"}))
+        self.assertRedirects(response, reverse("settings:staff_list"))
+        other.refresh_from_db()
+        self.assertFalse(other.is_superuser)
+        self.assertTrue(other.groups.filter(name="Spicy Manager").exists())
+        self.assertTrue(self.admin_user.is_superuser)
+
+    def test_last_admin_guard_blocks_without_other_admins(self):
+        request = RequestFactory().post("/")
+        request.user = self.cashier  # a non-admin actor
+        self.assertEqual(
+            _role_change_error(request, self.admin_user, "cashier"),
+            "Cannot demote the last Admin. Promote another Admin first.",
+        )
+
+    def test_last_admin_guard_passes_when_other_admins_exist(self):
+        other = CustomUser.objects.create_superuser(
+            username="second@test.com", password="testpass123", email="second@test.com"
+        )
+        request = RequestFactory().post("/")
+        request.user = self.cashier
+        self.assertIsNone(_role_change_error(request, other, "cashier"))

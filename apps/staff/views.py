@@ -129,6 +129,11 @@ def _entry_to_initial(opening_payments: list[OpeningPayment]) -> dict:
 
 def _save_opening_entry(form: OpeningFloatForm, cashier, instance: POSOpeningEntry | None) -> POSOpeningEntry | None:
     """Persist a POSOpeningEntry and its OpeningPayment rows from a bound form."""
+    from apps.settings.models import Restaurant
+
+    if Restaurant.load() is None:
+        form.add_error(None, "Restaurant settings are not configured.")
+        return None
     opening_amounts = form.opening_amounts()
     if not opening_amounts:
         form.add_error(
@@ -264,6 +269,7 @@ def closing_entry_detail(request: HttpRequest, pk: int) -> HttpResponse:
     )
     closing_payments = list(closing.closing_payments.select_related("mode_of_payment"))
     draft_count = Order.objects.open_drafts(closing.opening_entry).count()
+    cancelled_count = Order.objects.cancelled_in_shift(closing.opening_entry).count()
 
     if request.method == "POST":
         if closing.status != POSClosingEntry.DRAFT:
@@ -303,7 +309,13 @@ def closing_entry_detail(request: HttpRequest, pk: int) -> HttpResponse:
     return render(
         request,
         "backoffice/staff/closing_entry_detail.html",
-        {"closing": closing, "form_data": form_data, "closing_payments": closing_payments, "draft_count": draft_count},
+        {
+            "closing": closing,
+            "form_data": form_data,
+            "closing_payments": closing_payments,
+            "draft_count": draft_count,
+            "cancelled_count": cancelled_count,
+        },
     )
 
 

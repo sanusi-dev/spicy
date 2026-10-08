@@ -21,7 +21,9 @@ class PnLConfiguration(BaseModel):
     singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
     business_day_start_hour = models.PositiveSmallIntegerField(
         default=0,
-        help_text="The hour your business day starts (0 is midnight). For example, 6 means the day runs from 6am to 6am.",
+        help_text=(
+            "The hour your business day starts (0 is midnight). For example, 6 means the day runs from 6am to 6am."
+        ),
     )
     electricity_rate = models.DecimalField(
         max_digits=14,

@@ -1,6 +1,9 @@
 """GL posting services — order settlement, cancellation, refund, variance, and payables postings."""
 
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -11,31 +14,26 @@ from apps.payments.models import PaymentGLMapping
 from apps.settings.models import Restaurant
 from apps.utils.rounding import money
 
+if TYPE_CHECKING:
+    from apps.settings.models import ProductionUnit
+
 from .models import GLEntry, JournalEntry, JournalEntryAccount, LedgerAccount
 from .payables_models import SupplierInvoiceItem
 
 
-def _income_account_for(department):
-    """Return the ProductionUnit income account for a department, or None."""
+def _production_unit_for(department) -> ProductionUnit | None:
+    """Return the department's ProductionUnit with its GL accounts loaded, or None."""
+
     from apps.settings.models import ProductionUnit
 
-    unit = ProductionUnit.objects.filter(department=department).select_related("income_account").first()
-    if unit is not None and unit.income_account_id:
-        return unit.income_account
-    return None
+    return (
+        ProductionUnit.objects.filter(department=department)
+        .select_related("income_account", "expense_account", "sales_returns_account")
+        .first()
+    )
 
 
-def _expense_account_for(department):
-    """Return the ProductionUnit expense account for a department, or None."""
-    from apps.settings.models import ProductionUnit
-
-    unit = ProductionUnit.objects.filter(department=department).select_related("expense_account").first()
-    if unit is not None and unit.expense_account_id:
-        return unit.expense_account
-    return None
-
-
-def _resolve_required_account(account, *, label):
+def _resolve_required_account(account, *, label) -> LedgerAccount:
     if account is None:
         raise ValidationError(f"{label} is not configured.")
     if account.disabled:
@@ -45,7 +43,7 @@ def _resolve_required_account(account, *, label):
     return account
 
 
-def _resolve_payment_account(mode):
+def _resolve_payment_account(mode) -> LedgerAccount:
     try:
         mapping = PaymentGLMapping.objects.select_related("default_account").get(mode_of_payment=mode)
     except PaymentGLMapping.DoesNotExist:
@@ -62,7 +60,7 @@ def _resolve_payment_account(mode):
     return account
 
 
-def _order_lines_with_accounts(order):
+def _order_lines_with_accounts(order) -> list[dict[str, Any]]:
     """Return order lines with their departments for account resolution."""
     lines = list(order.items.select_related("item").all())
     result = []
@@ -77,13 +75,14 @@ def _order_lines_with_accounts(order):
     return result
 
 
-def _income_legs(rows):
+def _income_legs(rows) -> list[dict[str, Any]]:
     """Build income GL rows keyed by resolved income account, merging per account."""
     settings = Restaurant.load()
     default_income = settings.default_income_account if settings else None
-    per_account = {}
+    per_account: dict[int, dict[str, Any]] = {}
     for row in rows:
-        account = _income_account_for(row["department"]) or default_income
+        unit = _production_unit_for(row["department"])
+        account = unit.income_account if unit is not None and unit.income_account_id else default_income
         account = _resolve_required_account(account, label="The default income account")
         amount = row["line"].amount
         per_account[account.pk] = {
@@ -93,15 +92,16 @@ def _income_legs(rows):
     return list(per_account.values())
 
 
-def _sales_returns_legs(order, settings):
+def _sales_returns_legs(order, settings) -> list[dict[str, Any]]:
     """Build sales-returns GL rows keyed by resolved returns account, merging per account."""
     default_returns = settings.default_sales_returns_account if settings else None
-    per_account = {}
+    per_account: dict[int, dict[str, Any]] = {}
     for row in _order_lines_with_accounts(order):
         amount = abs(row["line"].amount)
         if not amount:
             continue
-        account = _sales_returns_account_for(row["department"]) or default_returns
+        unit = _production_unit_for(row["department"])
+        account = unit.sales_returns_account if unit is not None and unit.sales_returns_account_id else default_returns
         account = _resolve_required_account(account, label="The sales returns account")
         per_account[account.pk] = {
             "account": account,
@@ -110,10 +110,10 @@ def _sales_returns_legs(order, settings):
     return list(per_account.values())
 
 
-def _payment_legs(order, settings):
+def _payment_legs(order, settings) -> list[dict[str, Any]]:
     """Build payment GL rows (debits), reducing change once on the change account."""
     change_left = order.change_amount or Decimal("0")
-    change_account = None
+    change_account: LedgerAccount | None = None
     if change_left:
         change_account = _resolve_required_account(
             settings.account_for_change_amount if settings else None,
@@ -123,7 +123,7 @@ def _payment_legs(order, settings):
     for payment in order.payments.select_related("mode_of_payment").all():
         account = _resolve_payment_account(payment.mode_of_payment)
         amount = payment.amount
-        if change_left and account.pk == change_account.pk:
+        if change_left and change_account is not None and account.pk == change_account.pk:
             reduction = min(amount, change_left)
             amount -= reduction
             change_left -= reduction
@@ -134,7 +134,7 @@ def _payment_legs(order, settings):
     return rows
 
 
-def _rounding_leg(order, settings):
+def _rounding_leg(order, settings) -> list[dict[str, Any]]:
     """Round-off row: credit positive adjustment, debit negative."""
     amount = order.rounding_adjustment
     if not amount:
@@ -145,18 +145,19 @@ def _rounding_leg(order, settings):
     return [{"account": account, "debit": -amount}]
 
 
-def _cogs_legs(order, rows, settings):
+def _cogs_legs(order, rows, settings) -> list[dict[str, Any]]:
     """COGS from settle-time drink deductions — credited to the warehouse account."""
     from apps.inventory.models import StockLedgerEntry
 
     default_expense = settings.default_expense_account if settings else None
-    unit_expense = _expense_account_for("DRINKS")
+    drink_unit = _production_unit_for("DRINKS")
+    unit_expense = drink_unit.expense_account if drink_unit is not None and drink_unit.expense_account_id else None
     sle_rows = StockLedgerEntry.objects.filter(
         voucher_type="POS Order",
         voucher_no=str(order.pk),
         quantity__lt=0,
     ).select_related("item")
-    per_account = {}
+    per_account: dict[int, dict[str, Any]] = {}
     for sle in sle_rows:
         line = next((r for r in rows if r["line"].item_id == sle.item_id), None)
         if line is None:
@@ -182,9 +183,9 @@ def _cogs_legs(order, rows, settings):
     ]
 
 
-def _merge_rows(rows):
+def _merge_rows(rows) -> list[dict[str, Any]]:
     """Merge GL rows sharing account/against."""
-    merged = {}
+    merged: dict[tuple[int, str], dict[str, Any]] = {}
     for row in rows:
         key = (row.get("account").pk, row.get("against", ""))
         if key in merged:
@@ -207,7 +208,7 @@ def _merge_rows(rows):
     return result
 
 
-def _ensure_disjoint_sides(rows):
+def _ensure_disjoint_sides(rows) -> None:
     """Reject rows where one account sits on both the debit and credit side."""
     debits = {}
     credits = {}
@@ -225,7 +226,7 @@ def _ensure_disjoint_sides(rows):
 
 
 @transaction.atomic
-def post_order_gl(order):
+def post_order_gl(order) -> None:
     """Post GL entries for a settled order; fails closed when the account chain is unconfigured."""
     if order.status != SUBMITTED:
         raise ValidationError("Only submitted orders can be posted to the GL.")
@@ -261,21 +262,11 @@ def post_order_gl(order):
     )
 
 
-def _is_drink_line(line):
+def _is_drink_line(line) -> bool:
     return (line.department or getattr(line.item, "department", None)) == "DRINKS"
 
 
-def _sales_returns_account_for(department):
-    """Return the ProductionUnit sales-returns account for a department, or None."""
-    from apps.settings.models import ProductionUnit
-
-    unit = ProductionUnit.objects.filter(department=department).select_related("sales_returns_account").first()
-    if unit is not None and unit.sales_returns_account_id:
-        return unit.sales_returns_account
-    return None
-
-
-def _restore_value_for(return_order, line):
+def _restore_value_for(return_order, line) -> Decimal:
     """Booked value of a return line's restore SLE — zero when the line was not restocked."""
     from apps.inventory.models import StockLedgerEntry
 
@@ -288,7 +279,7 @@ def _restore_value_for(return_order, line):
     return abs(sle.stock_value_change) if sle is not None else Decimal("0")
 
 
-def _plug_round_off(rows, settings):
+def _plug_round_off(rows, settings) -> list[dict[str, Any]]:
     """Put any debit/credit remainder on the round-off account so the batch balances."""
     debit = sum((row.get("debit") or Decimal("0") for row in rows), Decimal("0"))
     credit = sum((row.get("credit") or Decimal("0") for row in rows), Decimal("0"))
@@ -307,7 +298,7 @@ def _plug_round_off(rows, settings):
 
 
 @transaction.atomic
-def post_refund_gl(return_order):
+def post_refund_gl(return_order) -> None:
     """Post refund GL rebuilt from the returned lines, payments, and wastage."""
     if return_order.status != SUBMITTED or not return_order.is_return:
         raise ValidationError("Only submitted return orders can be posted to the GL.")
@@ -320,7 +311,7 @@ def post_refund_gl(return_order):
         return  # idempotent
 
     if not GLEntry.objects.filter(voucher_type="Order", voucher_no=source.invoice_number, is_cancelled=False).exists():
-        return
+        raise ValidationError("The source order has no live GL entries. The refund cannot be posted.")
 
     settings = Restaurant.load()
     if settings is None:
@@ -344,9 +335,10 @@ def post_refund_gl(return_order):
             )
 
     default_expense = settings.default_expense_account if settings else None
-    unit_expense = _expense_account_for("DRINKS")
-    warehouse_account = None
-    wastage_account = None
+    drink_unit = _production_unit_for("DRINKS")
+    unit_expense = drink_unit.expense_account if drink_unit is not None and drink_unit.expense_account_id else None
+    warehouse_account: LedgerAccount | None = None
+    wastage_account: LedgerAccount | None = None
     drink_returns = [line for line in lines if _is_drink_line(line)]
     if drink_returns:
         warehouse_account = _resolve_required_account(
@@ -370,7 +362,7 @@ def post_refund_gl(return_order):
         expense = _resolve_required_account(unit_expense or default_expense, label="The default expense account")
         rows.append({"account": expense, "credit": value})
         if line.not_restockable:
-            if wastage_account.pk == expense.pk:
+            if wastage_account is None or wastage_account.pk == expense.pk:
                 raise ValidationError("Configure a wastage account that is separate from the drink expense account.")
             rows.append({"account": wastage_account, "debit": value})
         else:
@@ -393,7 +385,7 @@ def post_refund_gl(return_order):
 
 
 @transaction.atomic
-def post_cash_variance_gl(closing):
+def post_cash_variance_gl(closing) -> JournalEntry | None:
     """Post and submit the variance JournalEntry for a closing entry's per-mode differences."""
     from apps.staff.models import POSClosingEntry
 
@@ -449,7 +441,7 @@ def post_cash_variance_gl(closing):
 
 
 @transaction.atomic
-def post_shift_cash_out_gl(cash_out):
+def post_shift_cash_out_gl(cash_out) -> None:
     """Post a shift cash-out: Dr petty-cash/default expense, Cr cash-mode account. Idempotent."""
     from apps.staff.models import ShiftCashOut
 
@@ -475,7 +467,7 @@ def post_shift_cash_out_gl(cash_out):
     )
 
 
-def _payable_account_for(supplier, settings, label="The default payable account"):
+def _payable_account_for(supplier, settings, label="The default payable account") -> LedgerAccount:
     """Resolve the payable account: per-supplier override → Restaurant default."""
     account = supplier.payable_account if supplier.payable_account_id else None
     if account is None:
@@ -483,7 +475,7 @@ def _payable_account_for(supplier, settings, label="The default payable account"
     return _resolve_required_account(account, label=label)
 
 
-def _reverse_gl(voucher_type, voucher_no, remarks="Reversal"):
+def _reverse_gl(voucher_type, voucher_no, remarks="Reversal") -> None:
     """Mark a voucher's GL rows cancelled and post mirrored negated rows dated today."""
     originals = list(GLEntry.objects.filter(voucher_type=voucher_type, voucher_no=voucher_no, is_cancelled=False))
     if not originals:
@@ -509,7 +501,7 @@ def _reverse_gl(voucher_type, voucher_no, remarks="Reversal"):
 
 
 @transaction.atomic
-def build_supplier_invoice_stock_lines(invoice):
+def build_supplier_invoice_stock_lines(invoice) -> None:
     """Create SupplierInvoiceItem rows from the linked receipt's unlinked lines."""
     if not invoice.purchase_receipt_id:
         return
@@ -529,7 +521,7 @@ def build_supplier_invoice_stock_lines(invoice):
 
 
 @transaction.atomic
-def post_supplier_invoice_gl(invoice):
+def post_supplier_invoice_gl(invoice) -> None:
     """Post the supplier invoice: Dr GRNI/expense, Cr payable. Idempotent."""
     if GLEntry.objects.filter(
         voucher_type="Supplier Invoice", voucher_no=invoice.invoice_number, is_cancelled=False
@@ -581,13 +573,13 @@ def post_supplier_invoice_gl(invoice):
 
 
 @transaction.atomic
-def cancel_supplier_invoice_gl(invoice):
+def cancel_supplier_invoice_gl(invoice) -> None:
     """Reverse the invoice's GL rows (mirrored negated rows, originals cancelled)."""
     _reverse_gl("Supplier Invoice", invoice.invoice_number)
 
 
 @transaction.atomic
-def post_supplier_payment_gl(payment):
+def post_supplier_payment_gl(payment) -> None:
     """Post the supplier payment: Dr payable, Cr cash/bank. Idempotent."""
     if GLEntry.objects.filter(
         voucher_type="Supplier Payment", voucher_no=payment.payment_number, is_cancelled=False
@@ -617,6 +609,6 @@ def post_supplier_payment_gl(payment):
 
 
 @transaction.atomic
-def cancel_supplier_payment_gl(payment):
+def cancel_supplier_payment_gl(payment) -> None:
     """Reverse the payment's GL rows (mirrored negated rows, originals cancelled)."""
     _reverse_gl("Supplier Payment", payment.payment_number)

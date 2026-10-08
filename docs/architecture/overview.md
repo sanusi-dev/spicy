@@ -25,7 +25,7 @@ flowchart TD
 
 ## Project Boundaries
 
-- `spicy/` contains settings, root URLs, and WSGI configuration.
+- `spicy/` contains settings, root URLs, and WSGI configuration. Settings load `.env` through django-environ: `SECRET_KEY` has no committed fallback (a missing key fails at boot), `DEBUG` defaults off, `ALLOWED_HOSTS` defaults to `localhost,127.0.0.1`, and the admin-lock bypass is an explicit `SPICY_DEV_ADMIN_BYPASS` opt-in. `spicy/settings_production.py` adds the TLS-only flags (SSL redirect, secure cookies, HSTS) for an HTTPS deployment.
 - `apps/` contains the active project packages. They are top-level packages, never children of `spicy/`.
 - `templates/` contains the shared web shell, backoffice pages, POS pages, auth pages, and inline Django partials.
 - `assets/` contains Vite source JavaScript and CSS. `assets/javascript/site.js` is the main browser entry.
@@ -44,7 +44,7 @@ flowchart TD
 
 ## URL Precedence Note
 
-`spicy/urls.py` includes `apps.orders.pos_urls` at `/pos/` before `apps.web.urls`. `apps.web.urls` also declares `web:pos_index` at `/pos/`, but the earlier include wins for requests. The reverse name exists, but `web.views.pos_index()` is effectively shadowed by `pos:pos_home`.
+`spicy/urls.py` includes `apps.orders.pos_urls` at `/pos/`. The old shadowing `web:pos_index` route is gone; every caller reverses `pos:pos_home`.
 
 ## Business Logic Placement
 
@@ -57,7 +57,7 @@ flowchart TD
 ## Infrastructure and Integrations
 
 - PostgreSQL: configured in `spicy/settings.py:136-151`. Runs as a Docker service in `docker-compose.yml`.
-- Authentication/email: django-allauth under `/accounts/`, Django email backend, and admin signup notifications.
+- Authentication/email: django-allauth under `/accounts/`, Django email backend, and env-configured admin recipients.
 - Sites: `apps/web/meta.py` and `apps/web/migrations/0001_initial.py`.
 - Printing: `apps/orders/printing.py` currently returns a simulated success result. `ProductionUnit` stores printer settings, but no ESC/POS, HTTP, USB, LAN, or socket implementation exists.
 - Assets: Vite writes manifest-backed output into `static/`. Development runs Django and Vite through `scripts/dev.sh`.

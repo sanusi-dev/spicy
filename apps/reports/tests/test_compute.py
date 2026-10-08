@@ -345,6 +345,25 @@ class ElectricityAndTemplatesTest(DailyPnLTestMixin, TestCase):
         self.assertEqual(elec.amount_total, Decimal("100"))
         self.assertEqual(elec.section, DailyPnLLine.DIRECT)
 
+    def test_gross_profit_amounts_add_up(self):
+        self.config.electricity_rate = Decimal("50")
+        self.config.save()
+        order = self._create_order()
+        add_order_line(order, self.food, qty=1, rate=Decimal("1454.35"), menu_item=self.food_mi)
+        self._settle(order)
+        pnl = self._draft(electricity_opening=Decimal("10"), electricity_closing=Decimal("12"))
+        computation = compute_daily_pnl(pnl)
+        lines = {line.section: line for line in computation.lines}
+        gp = lines[DailyPnLLine.GROSS_PROFIT]
+        unallocated = next(line for line in computation.lines if line.label == "Unallocated direct costs")
+        self.assertEqual(unallocated.amount_total, Decimal("100"))
+        # 1454.35 collected gross, rounded to 1454.00, no COGS, 100 electricity.
+        self.assertEqual(gp.amount_total, Decimal("1354.00"))
+        self.assertEqual(
+            gp.amount_total,
+            gp.amount_food + gp.amount_drinks - unallocated.amount_total + lines[DailyPnLLine.ROUND_OFF].amount_total,
+        )
+
     def test_monthly_template_divides_by_days_in_month(self):
         PnLRecurringExpense.objects.create(
             name="Rent", kind=PnLRecurringExpense.INDIRECT_MONTHLY, amount=Decimal("31000")

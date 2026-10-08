@@ -1,261 +1,34 @@
-"""Inventory document services — WAC posting, reversal workflows, and recipe usage."""
+"""Inventory document services — WAC posting and reversal workflows."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
-from apps.utils.rounding import TWO_PLACES, money
+from apps.utils.rounding import money
+
+if TYPE_CHECKING:
+    from apps.accounting.models import GLEntry, LedgerAccount
 
 from .models import (
     Bin,
     Item,
     PurchaseReceipt,
     PurchaseReceiptItem,
-    Recipe,
     StockEntry,
     StockEntryDetail,
     StockLedgerEntry,
     StockReconciliation,
+    Warehouse,
     persist_inventory_lifecycle,
 )
 
 
-@dataclass
-class DishShare:
-    dish_name: str
-    qty: Decimal
-
-
-@dataclass
-class IngredientUsage:
-    ingredient_id: int
-    ingredient_name: str
-    uom: str
-    theoretical_qty: Decimal = Decimal("0")
-    consumption_qty: Decimal = Decimal("0")
-    waste_qty: Decimal = Decimal("0")
-    actual_qty: Decimal = Decimal("0")
-    variance_qty: Decimal = Decimal("0")
-    rate: Decimal = Decimal("0")
-    theoretical_amount: Decimal = Decimal("0")
-    consumption_amount: Decimal = Decimal("0")
-    waste_amount: Decimal = Decimal("0")
-    actual_amount: Decimal = Decimal("0")
-    variance_amount: Decimal = Decimal("0")
-    rate_estimated: bool = False
-    dishes: list = field(default_factory=list)
-
-
-@dataclass
-class UnmappedDish:
-    item_name: str
-    qty: Decimal = Decimal("0")
-    amount: Decimal = Decimal("0")
-
-
-@dataclass
-class FoodUsage:
-    usages: list = field(default_factory=list)
-    unmapped: list = field(default_factory=list)
-    theoretical_cost: Decimal = Decimal("0")
-    actual_cost: Decimal = Decimal("0")
-    variance_cost: Decimal = Decimal("0")
-    counted: bool = True
-
-
-def _kitchen_warehouse():
-    from apps.settings.models import ProductionUnit
-
-    kitchen = ProductionUnit.objects.select_related("warehouse").filter(department=ProductionUnit.FOOD).first()
-    return kitchen.warehouse if kitchen else None
-
-
-def _ingredient_rate(ingredient, kitchen, actual_qty, actual_amount):
-    """Weighted actual-SLE rate, else Kitchen bin WAC, else last purchase rate, else 0."""
-    if actual_qty:
-        return money(actual_amount / actual_qty)
-    if kitchen is not None:
-        bin_obj = Bin.objects.filter(item=ingredient, warehouse=kitchen).first()
-        if bin_obj is not None and bin_obj.valuation_rate:
-            return bin_obj.valuation_rate
-    if ingredient.last_purchase_rate:
-        return ingredient.last_purchase_rate
-    return Decimal("0")
-
-
-def recipe_plate_cost(recipe):
-    """Display-only cost of one portion: sum(qty × Kitchen WAC or last rate) / output."""
-    items = recipe.items.select_related("ingredient") if recipe.pk else []
-    return _plate_cost(recipe.output_qty, items)
-
-
-def _plate_cost(output_qty, rows):
-    """Cost per output portion for (ingredient, qty) rows."""
-    kitchen = _kitchen_warehouse()
-    total = Decimal("0")
-    for line in rows:
-        ingredient = line.ingredient
-        rate = None
-        if kitchen is not None:
-            bin_obj = Bin.objects.filter(item=ingredient, warehouse=kitchen).first()
-            if bin_obj is not None and bin_obj.valuation_rate:
-                rate = bin_obj.valuation_rate
-        if rate is None:
-            rate = ingredient.last_purchase_rate or Decimal("0")
-        total += line.qty * rate
-    if not output_qty:
-        return Decimal("0")
-    return money(total / output_qty)
-
-
-def compute_food_usage(business_date):
-    """Theoretical (recipe × sales) vs actual (kitchen SLEs) ingredient usage for a business date."""
-    from apps.orders.models import OrderItem
-    from apps.reports.models import PnLConfiguration
-    from apps.reports.sources import ZERO, business_day_window, orders_in_window
-
-    config = PnLConfiguration.load()
-    start, end = business_day_window(business_date, config.business_day_start_hour)
-    orders = orders_in_window(start, end)
-    lines = (
-        OrderItem.objects.filter(
-            Q(department="FOOD") | Q(department__isnull=True, item__department="FOOD"),
-            order_id__in=[o.pk for o in orders],
-        )
-        .select_related("item")
-        .order_by("pk")
-    )
-    item_ids = {line.item_id for line in lines}
-    recipes = {
-        recipe.item_id: recipe
-        for recipe in Recipe.objects.filter(is_active=True, item_id__in=item_ids).prefetch_related(
-            "items__ingredient__stock_uom"
-        )
-    }
-    theoretical = {}
-    unmapped = {}
-
-    def _usage(ingredient):
-        usage = theoretical.get(ingredient.pk)
-        if usage is None:
-            usage = theoretical[ingredient.pk] = IngredientUsage(
-                ingredient_id=ingredient.pk,
-                ingredient_name=ingredient.item_name,
-                uom=ingredient.stock_uom.name if ingredient.stock_uom_id else "",
-            )
-        return usage
-
-    for line in lines:
-        recipe = recipes.get(line.item_id)
-        if recipe is None or not recipe.output_qty:
-            dish = unmapped.setdefault(line.item_id, UnmappedDish(item_name=line.item_name or line.item.item_name))
-            dish.qty += line.qty
-            dish.amount += line.amount
-            continue
-        factor = line.qty / recipe.output_qty
-        dish_name = line.item_name or line.item.item_name
-        for recipe_item in recipe.items.all():
-            qty_add = factor * recipe_item.qty
-            usage = _usage(recipe_item.ingredient)
-            usage.theoretical_qty += qty_add
-            usage.dishes.append(DishShare(dish_name=dish_name, qty=qty_add))
-
-    kitchen = _kitchen_warehouse()
-    counted = False
-    actual = {}
-    if kitchen is not None:
-        recs = list(
-            StockReconciliation.objects.filter(
-                status="SUBMITTED",
-                reason__in=["CONSUMPTION", "WASTE_DAMAGE"],
-                posting_date=business_date,
-                warehouse=kitchen,
-            )
-        )
-        counted = bool(recs)
-        reason_by_no = {str(rec.pk): rec.reason for rec in recs}
-        if reason_by_no:
-            sles = (
-                StockLedgerEntry.objects.filter(
-                    voucher_type="Stock Reconciliation",
-                    voucher_no__in=list(reason_by_no),
-                    quantity__lt=0,
-                )
-                .select_related("item", "item__stock_uom")
-                .order_by("pk")
-            )
-            for sle in sles:
-                entry = actual.setdefault(
-                    sle.item_id,
-                    {
-                        "ingredient": sle.item,
-                        "consumption_qty": ZERO,
-                        "waste_qty": ZERO,
-                        "consumption_amount": ZERO,
-                        "waste_amount": ZERO,
-                        "amount": ZERO,
-                    },
-                )
-                qty = abs(sle.quantity)
-                amount = money(abs(sle.stock_value_change))
-                if reason_by_no[sle.voucher_no] == "WASTE_DAMAGE":
-                    entry["waste_qty"] += qty
-                    entry["waste_amount"] += amount
-                else:
-                    entry["consumption_qty"] += qty
-                    entry["consumption_amount"] += amount
-                entry["amount"] += amount
-
-    usages = []
-    ingredients = {}
-    for usage in theoretical.values():
-        ingredients[usage.ingredient_id] = usage
-    for item_id, entry in actual.items():
-        if item_id not in ingredients:
-            ingredient = entry["ingredient"]
-            ingredients[item_id] = IngredientUsage(
-                ingredient_id=item_id,
-                ingredient_name=ingredient.item_name,
-                uom=ingredient.stock_uom.name if ingredient.stock_uom_id else "",
-            )
-    for usage in ingredients.values():
-        entry = actual.get(usage.ingredient_id, {})
-        usage.consumption_qty = entry.get("consumption_qty", ZERO)
-        usage.waste_qty = entry.get("waste_qty", ZERO)
-        usage.actual_qty = (usage.consumption_qty + usage.waste_qty).quantize(TWO_PLACES)
-        usage.theoretical_qty = usage.theoretical_qty.quantize(TWO_PLACES)
-        usage.consumption_amount = money(entry.get("consumption_amount", ZERO))
-        usage.waste_amount = money(entry.get("waste_amount", ZERO))
-        usage.actual_amount = money(entry.get("amount", ZERO))
-        ingredient = entry.get("ingredient")
-        if ingredient is None:
-            ingredient = Item.objects.select_related("stock_uom").get(pk=usage.ingredient_id)
-        usage.rate = _ingredient_rate(ingredient, kitchen, usage.actual_qty, usage.actual_amount)
-        usage.rate_estimated = usage.rate == 0
-        usage.theoretical_amount = money(usage.theoretical_qty * usage.rate)
-        usage.variance_qty = (usage.theoretical_qty - usage.actual_qty).quantize(TWO_PLACES)
-        usage.variance_amount = money(usage.theoretical_amount - usage.actual_amount)
-        usages.append(usage)
-    usages.sort(key=lambda u: u.ingredient_name)
-    unmapped_list = sorted(unmapped.values(), key=lambda d: d.item_name)
-    for dish in unmapped_list:
-        dish.qty = dish.qty.quantize(TWO_PLACES)
-        dish.amount = money(dish.amount)
-    return FoodUsage(
-        usages=usages,
-        unmapped=unmapped_list,
-        theoretical_cost=money(sum((u.theoretical_amount for u in usages), ZERO)),
-        actual_cost=money(sum((u.actual_amount for u in usages), ZERO)),
-        variance_cost=money(sum((u.variance_amount for u in usages), ZERO)),
-        counted=counted,
-    )
-
-
-def _resolve_account(account, label):
+def _resolve_account(account, label) -> LedgerAccount:
     if account is None:
         raise ValidationError(f"{label} is not configured.")
     if account.disabled:
@@ -265,8 +38,9 @@ def _resolve_account(account, label):
     return account
 
 
-def _reverse_sles_at_current_wac(*, sles, locked_bins, voucher_type, voucher_no):
+def _reverse_sles_at_current_wac(*, sles, locked_bins, voucher_type, voucher_no) -> dict[int, Decimal]:
     """Reverse each SLE at current WAC and stamp CANCELLATION_WAC drift. Returns pre-cancel WAC by SLE pk."""
+
     pre_wac_map = {}
     for sle in sles:
         bin_obj = locked_bins[(sle.item_id, sle.warehouse_id)]
@@ -291,7 +65,7 @@ def _reverse_sles_at_current_wac(*, sles, locked_bins, voucher_type, voucher_no)
     return pre_wac_map
 
 
-def _cancellation_wac_gl_rows(*, sles, pre_wac_map, counter_account, variance_account):
+def _cancellation_wac_gl_rows(*, sles, pre_wac_map, counter_account, variance_account) -> list[dict[str, Any]]:
     """SIH at today's value, counter-account at the original booked value, drift to variance."""
     rows = []
     variance_acct = None
@@ -330,7 +104,7 @@ def _cancellation_wac_gl_rows(*, sles, pre_wac_map, counter_account, variance_ac
     return rows
 
 
-def _reconciliation_cancel_counter_account(locked):
+def _reconciliation_cancel_counter_account(locked) -> LedgerAccount:
     """The non-SIH account that the original reconciliation posted against."""
     from apps.settings.models import ProductionUnit, Restaurant
 
@@ -357,14 +131,14 @@ def _reconciliation_cancel_counter_account(locked):
     return _resolve_account(restaurant.wastage_account if restaurant else None, "The wastage account")
 
 
-def _post_gl_rows(posting_date, voucher_type, voucher_no, rows, remarks):
+def _post_gl_rows(posting_date, voucher_type, voucher_no, rows, remarks) -> list[GLEntry]:
     """Merge rows per account and post them."""
 
     from apps.accounting.models import GLEntry
 
     if not rows:
         return []
-    merged = {}
+    merged: dict[int, dict[str, Any]] = {}
     for r in rows:
         key = r["account"].pk
         if key in merged:
@@ -386,7 +160,7 @@ def _post_gl_rows(posting_date, voucher_type, voucher_no, rows, remarks):
 
 
 @transaction.atomic
-def submit_stock_entry(entry):
+def submit_stock_entry(entry) -> None:
     """Post the stock entry: create SLEs for every detail line and mark submitted."""
     from apps.settings.models import ProductionUnit, Restaurant
 
@@ -472,7 +246,10 @@ def submit_stock_entry(entry):
         from apps.accounting.services import _resolve_payment_account
         from apps.payments.models import ModeOfPayment
 
-        mode = ModeOfPayment.objects.get(pk=locked.mode_of_payment_id)
+        mode_pk = locked.mode_of_payment_id
+        mode = ModeOfPayment.objects.filter(pk=mode_pk).first() if mode_pk is not None else None
+        if mode is None:
+            raise ValidationError("The purchase receipt has no payment mode for its funding legs.")
         funding_acct = _resolve_payment_account(mode)
     for detail in details:
         store_bin = locked_bins[(detail.item_id, restaurant.store_warehouse_id)]
@@ -551,7 +328,9 @@ def submit_stock_entry(entry):
     entry.status = locked.status
 
 
-def _transfer_cancel_route(detail, original_sles):
+def _transfer_cancel_route(
+    detail, original_sles
+) -> tuple[Warehouse | None, Warehouse | None, StockLedgerEntry | None, StockLedgerEntry | None]:
     """Return the snapshotted warehouses and original SLE pair for one transfer line."""
     detail_no = str(detail.pk)
     orig_store = next(
@@ -576,7 +355,7 @@ def _transfer_cancel_route(detail, original_sles):
 
 
 @transaction.atomic
-def cancel_stock_entry(entry):
+def cancel_stock_entry(entry) -> None:
     """Reverse every SLE created by this entry and mark cancelled."""
     from apps.accounting.models import GLEntry
 
@@ -600,6 +379,7 @@ def cancel_stock_entry(entry):
             (detail.item_id, warehouse.pk)
             for detail, source, target, _orig_store, _orig_dest in routes
             for warehouse in (source, target)
+            if warehouse is not None
         }
         locked_bins = {
             (b.item_id, b.warehouse_id): b
@@ -611,7 +391,15 @@ def cancel_stock_entry(entry):
             .order_by("item_id", "warehouse_id")
         }
         reversal_rows = []
-        for detail, source, target, orig_store, orig_dest in routes:
+        for detail, raw_source, raw_target, orig_store, orig_dest in routes:
+            if raw_source is None or raw_target is None:
+                raise ValidationError(
+                    "This transfer cannot be cancelled — the snapshotted warehouses are missing."
+                    " Re-run cancel after re-checking the document."
+                )
+            if orig_store is None or orig_dest is None:
+                raise ValidationError("This transfer cannot be cancelled — the original stock movements are missing.")
+            source, target = raw_source, raw_target
             dest_bin = locked_bins.get((detail.item_id, target.pk))
             store_bin = locked_bins.get((detail.item_id, source.pk))
             if not dest_bin or not store_bin:
@@ -725,7 +513,10 @@ def cancel_stock_entry(entry):
                 from apps.accounting.services import _resolve_payment_account
                 from apps.payments.models import ModeOfPayment
 
-                mode = ModeOfPayment.objects.get(pk=locked.mode_of_payment_id)
+                mode_pk = locked.mode_of_payment_id
+                mode = ModeOfPayment.objects.filter(pk=mode_pk).first() if mode_pk is not None else None
+                if mode is None:
+                    raise ValidationError("The stock entry has no payment mode for its funding legs.")
                 funding_acct = _resolve_payment_account(mode)
                 new_rows = _cancellation_wac_gl_rows(
                     sles=sles,
@@ -746,7 +537,7 @@ def cancel_stock_entry(entry):
 
 
 @transaction.atomic
-def submit_stock_reconciliation(reconciliation, actor=None):
+def submit_stock_reconciliation(reconciliation, actor=None) -> None:
     """Post adjustment SLEs and GL legs for the four active reconciliation reasons."""
     from apps.settings.models import ProductionUnit
 
@@ -756,7 +547,7 @@ def submit_stock_reconciliation(reconciliation, actor=None):
         return
     if locked.warehouse.disabled:
         raise ValidationError("The reconciliation warehouse must be enabled.")
-    valid_reasons = {value for value, _label in locked._meta.get_field("reason").choices}
+    valid_reasons = {value for value, _label in (locked._meta.get_field("reason").choices or [])}
     if locked.reason not in valid_reasons:
         raise ValidationError("A reconciliation reason is required.")
 
@@ -795,30 +586,29 @@ def submit_stock_reconciliation(reconciliation, actor=None):
 
     restaurant = Restaurant.load()
     sih_acct = _resolve_account(locked.warehouse.account, "The warehouse account")
-    adjustment_acct = None
-    opening_acct = None
-    expense_acct = None
-    wastage_acct = None
+    counter_accts: dict[str, LedgerAccount] = {}
     if locked.reason == "OPENING_STOCK":
         if StockLedgerEntry.objects.filter(warehouse=locked.warehouse).exists():
             raise ValidationError("Opening Stock is only allowed for a fresh warehouse with no stock history.")
-        opening_acct = _resolve_account(
+        counter_accts[locked.reason] = _resolve_account(
             restaurant.temporary_opening_account if restaurant else None, "The temporary opening account"
         )
-        if opening_acct.report_type == "PROFIT_AND_LOSS":
+        if counter_accts[locked.reason].report_type == "PROFIT_AND_LOSS":
             raise ValidationError("The temporary opening account must be a balance-sheet account, never a P&L account.")
     elif locked.reason == "ADJUSTMENT":
-        adjustment_acct = _resolve_account(
+        counter_accts[locked.reason] = _resolve_account(
             restaurant.stock_adjustment_account if restaurant else None, "The stock adjustment account"
         )
     elif locked.reason == "CONSUMPTION":
         unit_expense = kitchen_unit.expense_account if kitchen_unit is not None else None
-        expense_acct = _resolve_account(
+        counter_accts[locked.reason] = _resolve_account(
             unit_expense or (restaurant.default_expense_account if restaurant else None),
             "The kitchen expense account",
         )
     else:
-        wastage_acct = _resolve_account(restaurant.wastage_account if restaurant else None, "The wastage account")
+        counter_accts[locked.reason] = _resolve_account(
+            restaurant.wastage_account if restaurant else None, "The wastage account"
+        )
 
     for line in lines:
         Bin.get_or_create_bin_id(line.item_id, locked.warehouse_id)
@@ -854,8 +644,9 @@ def submit_stock_reconciliation(reconciliation, actor=None):
             )
             amount = money(abs(sle.stock_value_change))
             if amount:
-                gl_rows.append({"account": wastage_acct, "debit": amount, "against": sih_acct.name})
-                gl_rows.append({"account": sih_acct, "credit": amount, "against": wastage_acct.name})
+                counter = counter_accts[locked.reason]
+                gl_rows.append({"account": counter, "debit": amount, "against": sih_acct.name})
+                gl_rows.append({"account": sih_acct, "credit": amount, "against": counter.name})
             continue
         if line.qty < (bin_obj.reserved_qty or Decimal("0")):
             raise ValidationError(
@@ -894,23 +685,17 @@ def submit_stock_reconciliation(reconciliation, actor=None):
         amount = money(abs(sle.stock_value_change))
         if not amount:
             continue
-        if locked.reason == "OPENING_STOCK":
-            if difference > 0:
-                gl_rows.append({"account": sih_acct, "debit": amount, "against": opening_acct.name})
-                gl_rows.append({"account": opening_acct, "credit": amount, "against": sih_acct.name})
-            else:
-                gl_rows.append({"account": opening_acct, "debit": amount, "against": sih_acct.name})
-                gl_rows.append({"account": sih_acct, "credit": amount, "against": opening_acct.name})
-        elif locked.reason == "ADJUSTMENT":
-            if difference > 0:
-                gl_rows.append({"account": sih_acct, "debit": amount, "against": adjustment_acct.name})
-                gl_rows.append({"account": adjustment_acct, "credit": amount, "against": sih_acct.name})
-            else:
-                gl_rows.append({"account": adjustment_acct, "debit": amount, "against": sih_acct.name})
-                gl_rows.append({"account": sih_acct, "credit": amount, "against": adjustment_acct.name})
+        counter = counter_accts[locked.reason]
+        if locked.reason == "CONSUMPTION":
+            # Consumption is outbound — the expense absorbs the cost at WAC; SIH is credited.
+            gl_rows.append({"account": counter, "debit": amount, "against": sih_acct.name})
+            gl_rows.append({"account": sih_acct, "credit": amount, "against": counter.name})
+        elif difference > 0:
+            gl_rows.append({"account": sih_acct, "debit": amount, "against": counter.name})
+            gl_rows.append({"account": counter, "credit": amount, "against": sih_acct.name})
         else:
-            gl_rows.append({"account": expense_acct, "debit": amount, "against": sih_acct.name})
-            gl_rows.append({"account": sih_acct, "credit": amount, "against": expense_acct.name})
+            gl_rows.append({"account": counter, "debit": amount, "against": sih_acct.name})
+            gl_rows.append({"account": sih_acct, "credit": amount, "against": counter.name})
     if gl_rows:
         from apps.accounting.models import GLEntry
 
@@ -931,7 +716,7 @@ def submit_stock_reconciliation(reconciliation, actor=None):
 
 
 @transaction.atomic
-def cancel_stock_reconciliation(reconciliation, actor=None):
+def cancel_stock_reconciliation(reconciliation, actor=None) -> None:
     """Reverse every SLE created by this reconciliation and mark cancelled."""
     locked = StockReconciliation.objects.select_for_update().get(pk=reconciliation.pk)
     if locked.status != "SUBMITTED":
@@ -988,7 +773,7 @@ def cancel_stock_reconciliation(reconciliation, actor=None):
     reconciliation.status = locked.status
 
 
-def check_receipt_cancel_blocked(receipt):
+def check_receipt_cancel_blocked(receipt) -> bool:
     """Return True if a submitted supplier invoice references the receipt."""
     from apps.accounting.models import SupplierInvoice
 
@@ -996,7 +781,7 @@ def check_receipt_cancel_blocked(receipt):
 
 
 @transaction.atomic
-def submit_purchase_receipt(receipt):
+def submit_purchase_receipt(receipt) -> None:
     """Post the receipt: create SLEs for each line into the configured store warehouse."""
     from apps.settings.models import Restaurant
 
@@ -1075,7 +860,7 @@ def submit_purchase_receipt(receipt):
 
 
 @transaction.atomic
-def cancel_purchase_receipt(receipt):
+def cancel_purchase_receipt(receipt) -> None:
     """Reverse every SLE created by this receipt and mark cancelled."""
     from apps.accounting.models import GLEntry
     from apps.settings.models import Restaurant
@@ -1140,7 +925,7 @@ def cancel_purchase_receipt(receipt):
     receipt.status = locked.status
 
 
-def _revert_last_purchase_rates(receipt):
+def _revert_last_purchase_rates(receipt) -> None:
     """Restore each item's last_purchase_rate from the prior submitted receipt."""
     lines = list(receipt.items.select_related("item").all())
     if not lines:
@@ -1162,7 +947,7 @@ def _revert_last_purchase_rates(receipt):
     Item.objects.bulk_update(items_to_update, ["last_purchase_rate", "updated_at"])
 
 
-def _revert_last_purchase_rates_for_stock_entry(entry, sles):
+def _revert_last_purchase_rates_for_stock_entry(entry, sles) -> None:
     """Revert last_purchase_rate for stock entry material receipt cancel."""
     if not sles:
         return

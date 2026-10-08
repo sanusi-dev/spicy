@@ -52,7 +52,7 @@
             <div class="mt-6 flex items-baseline justify-between gap-4 rounded-2xl bg-teal-50 px-4 py-3 ring-1 ring-teal-100">
               <span class="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">Total Entered</span>
               <span class="text-right font-mono text-base font-extrabold tabular-nums text-teal-900">
-                <span x-text="'₦' + entered.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })">₦0</span>
+                <span x-text="$money(entered)">₦0</span>
                 <span class="text-sm font-semibold text-teal-700">/ ₦{{ order.rounded_total|intcomma }}</span>
               </span>
             </div>
@@ -84,11 +84,11 @@
             <div class="mt-6 space-y-2 border-t border-slate-200 pt-5">
               <div class="flex justify-between text-sm" x-show="total - entered > 0.005" x-cloak>
                 <span class="font-semibold text-amber-700">Remaining</span>
-                <span class="font-mono font-bold tabular-nums text-amber-700" x-text="'₦' + Math.max(total - entered, 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"></span>
+                <span class="font-mono font-bold tabular-nums text-amber-700" x-text="$money(Math.max(total - entered, 0))"></span>
               </div>
               <div class="flex justify-between text-sm" x-show="entered - total > 0.005" x-cloak>
                 <span class="font-semibold text-emerald-700">Change</span>
-                <span class="font-mono font-bold tabular-nums text-emerald-700" x-text="'₦' + Math.max(entered - total, 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"></span>
+                <span class="font-mono font-bold tabular-nums text-emerald-700" x-text="$money(Math.max(entered - total, 0))"></span>
               </div>
             </div>
           </div>
@@ -96,7 +96,7 @@
             <button type="submit" :disabled="processing || {{ payment_modes|yesno:'false,true' }}" class="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-teal-700 px-5 text-base font-bold text-white shadow-lg shadow-teal-900/10 transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
               <span class="flex size-5 items-center justify-center" x-show="!processing">{% hgi_stroke name="payment-01" size="20" color="currentColor" stroke_width="2" %}</span>
               <span x-show="!processing">
-                Pay <span x-text="'₦' + entered.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })">₦0</span>
+                Pay <span x-text="$money(entered)">₦0</span>
               </span>
               <span x-show="processing" x-cloak>Processing...</span>
             </button>

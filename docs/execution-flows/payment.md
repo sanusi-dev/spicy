@@ -7,7 +7,7 @@ Pay link
   -> hx-get pos:pos_order_settle
   -> views_pos.pos_order_settle(GET)
   -> _get_settle_payment_modes()
-  -> render pos/index.html#payment_dialog
+  -> render pos/partials/payment/dialog.html
   -> swap #payment-dialog-container
   -> Alpine posModalDialog initializes focus/close state
 ```

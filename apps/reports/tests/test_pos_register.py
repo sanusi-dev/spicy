@@ -29,7 +29,7 @@ class POSRegisterTest(DailyPnLTestMixin, TestCase):
             opening_entry=opening,
             cashier=cashier,
             posting_date=posting_date,
-            status=POSClosingEntry.SUBMITTED,
+            status=POSClosingEntry.DRAFT,
             total_short_excess=Decimal(difference),
         )
         ClosingPayment.objects.create(
@@ -39,6 +39,9 @@ class POSRegisterTest(DailyPnLTestMixin, TestCase):
             closing_amount=Decimal(counted),
             difference=Decimal(difference),
         )
+        # ORM immutability: submitted closes reject child-row saves, so stamp the status last via update.
+        POSClosingEntry.objects.filter(pk=closing.pk).update(status=POSClosingEntry.SUBMITTED)
+        closing.refresh_from_db()
         return closing
 
     def test_submitted_rows_display_stored_netting(self):

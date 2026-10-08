@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
+from apps.reports.food_usage import _plate_cost, compute_food_usage, recipe_plate_cost
 from apps.users.decorators import backoffice_required
 from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
@@ -327,7 +328,7 @@ def item_detail(request: HttpRequest, pk: int) -> HttpResponse:
     active_recipe = (
         Recipe.objects.filter(item=item, is_active=True).prefetch_related("items__ingredient__stock_uom").first()
     )
-    plate_cost = services.recipe_plate_cost(active_recipe) if active_recipe else None
+    plate_cost = recipe_plate_cost(active_recipe) if active_recipe else None
     return render(
         request,
         "backoffice/inventory/item_detail.html",
@@ -940,7 +941,7 @@ def recipe_list(request: HttpRequest) -> HttpResponse:
         .prefetch_related("items__ingredient__stock_uom")
         .order_by("item__item_name")
     )
-    rows = [(recipe, services.recipe_plate_cost(recipe)) for recipe in recipes]
+    rows = [(recipe, recipe_plate_cost(recipe)) for recipe in recipes]
     return render(request, "backoffice/inventory/recipe_list.html", {"rows": rows})
 
 
@@ -984,7 +985,7 @@ def recipe_detail(request: HttpRequest, pk: int) -> HttpResponse:
     return render(
         request,
         "backoffice/inventory/recipe_detail.html",
-        {"recipe": recipe, "plate_cost": services.recipe_plate_cost(recipe)},
+        {"recipe": recipe, "plate_cost": recipe_plate_cost(recipe)},
     )
 
 
@@ -1010,7 +1011,7 @@ def recipe_update(request: HttpRequest, pk: int) -> HttpResponse:
             "is_create": False,
             "recipe": recipe,
             "ingredient_formset": ingredient_fs,
-            "plate_cost": services.recipe_plate_cost(recipe),
+            "plate_cost": recipe_plate_cost(recipe),
         },
     )
 
@@ -1063,7 +1064,7 @@ def recipe_plate_cost_preview(request: HttpRequest) -> HttpResponse:
         if ingredient is None or qty <= 0:
             continue
         rows.append(SimpleNamespace(ingredient=ingredient, qty=qty))
-    preview = services._plate_cost(output_qty, rows) if rows and output_qty > 0 else None
+    preview = _plate_cost(output_qty, rows) if rows and output_qty > 0 else None
     return render(
         request,
         "backoffice/inventory/recipe_form.html#plate_cost_preview_partial",
@@ -1080,8 +1081,9 @@ def food_usage(request: HttpRequest) -> HttpResponse:
         business_date = date_class.fromisoformat(raw) if raw else date_class.today()
     except ValueError:
         business_date = date_class.today()
-    usage = services.compute_food_usage(business_date)
+    usage = compute_food_usage(business_date)
     food_sales = Decimal("0")
+    food_sales_error = None
     try:
         from apps.reports.models import PnLConfiguration
         from apps.reports.sources import business_day_window, orders_in_window, sales_by_department
@@ -1089,10 +1091,16 @@ def food_usage(request: HttpRequest) -> HttpResponse:
         config = PnLConfiguration.load()
         start, end = business_day_window(business_date, config.business_day_start_hour)
         food_sales, _drinks = sales_by_department(orders_in_window(start, end))
-    except ValidationError:
+    except ValidationError as e:
         food_sales = Decimal("0")
+        food_sales_error = e.messages[0] if e.messages else str(e)
     return render(
         request,
         "backoffice/inventory/food_usage.html",
-        {"business_date": business_date, "usage": usage, "food_sales": food_sales},
+        {
+            "business_date": business_date,
+            "usage": usage,
+            "food_sales": food_sales,
+            "food_sales_error": food_sales_error,
+        },
     )

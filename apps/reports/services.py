@@ -1,5 +1,7 @@
 """Daily P&L computation — preview and submit (no GL posting)."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -8,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models import FiscalYear
-from apps.inventory.services import compute_food_usage
+from apps.reports.food_usage import compute_food_usage
 from apps.utils.rounding import money, percent
 
 from .models import (
@@ -36,13 +38,13 @@ from .sources import (
 )
 
 
-def _pct(amount, gross):
+def _pct(amount, gross) -> Decimal:
     if not gross:
         return ZERO
     return percent((amount / gross) * Decimal("100"))
 
 
-def _split(amount, department):
+def _split(amount, department) -> tuple[Decimal, Decimal, Decimal]:
     if department == FOOD:
         return amount, ZERO, amount
     if department == DRINKS:
@@ -74,13 +76,14 @@ class Computation:
     food_usage_counted: bool = True
 
 
-def _append(lines, spec):
+def _append(lines, spec) -> None:
     spec.sort_order = len(lines)
     lines.append(spec)
 
 
-def compute_daily_pnl(pnl):
+def compute_daily_pnl(pnl) -> Computation:
     """Build statement lines and totals from live sources plus the draft's inputs."""
+
     config = PnLConfiguration.load()
     start, end = business_day_window(pnl.business_date, config.business_day_start_hour)
     orders = orders_in_window(start, end)
@@ -172,6 +175,8 @@ def compute_daily_pnl(pnl):
         direct_total += amount
 
     employee_total = ZERO
+    employee_food = ZERO
+    employee_drinks = ZERO
     templates = list(PnLRecurringExpense.objects.filter(disabled=False))
     for expense in templates:
         amount = recurring_amount(expense, pnl.business_date, gross)
@@ -200,7 +205,13 @@ def compute_daily_pnl(pnl):
 
     gp_food = money(food - food_actual - direct_food)
     gp_drinks = money(drinks - cogs_drinks - direct_drinks)
-    gp = money(net - cogs - direct_total)
+    unallocated_direct = money(direct_total - direct_food - direct_drinks)
+    if unallocated_direct:
+        _append(
+            lines,
+            LineSpec(DailyPnLLine.DIRECT, "Unallocated direct costs", ZERO, ZERO, unallocated_direct),
+        )
+    gp = money(gp_food + gp_drinks - unallocated_direct + round_off_amount)
     _append(lines, LineSpec(DailyPnLLine.GROSS_PROFIT, "Gross profit", gp_food, gp_drinks, gp))
 
     if pnl.employee_cost_override is not None:
@@ -221,10 +232,22 @@ def compute_daily_pnl(pnl):
                     DailyPnLLine.EMPLOYEE, expense.name, food_amt, drinks_amt, total_amt, source=DailyPnLLine.SETTINGS
                 ),
             )
+            employee_food += food_amt
+            employee_drinks += drinks_amt
             employee_total += total_amt
 
     prime = money(cogs + employee_total)
-    _append(lines, LineSpec(DailyPnLLine.PRIME_COST, "Prime cost", food_actual, cogs_drinks, prime, is_memo=True))
+    _append(
+        lines,
+        LineSpec(
+            DailyPnLLine.PRIME_COST,
+            "Prime cost",
+            money(food_actual + employee_food),
+            money(cogs_drinks + employee_drinks),
+            prime,
+            is_memo=True,
+        ),
+    )
 
     depreciation = money(config.daily_depreciation)
     _append(
@@ -316,7 +339,7 @@ def compute_daily_pnl(pnl):
 
 
 @transaction.atomic
-def submit_daily_pnl(pnl, actor=None):
+def submit_daily_pnl(pnl, actor=None) -> DailyPnL:
     """Snapshot computation onto the document and flip it SUBMITTED. No GL."""
     locked = DailyPnL.objects.select_for_update().get(pk=pnl.pk)
     if locked.status != DailyPnL.DRAFT:

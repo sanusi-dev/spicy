@@ -23,7 +23,7 @@
 - URLs: `users/urls.py` mounts profile display and avatar upload under `/users/`.
 - Views/forms: `users/views.py`, `CustomUserChangeForm`, `UploadAvatarForm`, and allauth form overrides in `users/forms.py`.
 - Models/helpers: `CustomUser` role/avatar properties live in `users/models.py`. Image and email helpers live in `users/helpers.py`.
-- Signals: `users/signals.py` handles group-cache invalidation, signup admin notification, primary-email update, and avatar file cleanup.
+- Signals: `users/signals.py` handles group-cache invalidation, primary-email update, and avatar file cleanup.
 - Templates/frontend: `templates/account/*`, `templates/web/pending_approval.html`, and shared `logout.js` behavior.
 - Side effects: `post_migrate` creates role groups. Avatar replacement/deletion removes files.
 
@@ -100,7 +100,7 @@
 
 ### `apps.web`
 
-- URLs: `web/urls.py` exposes the root role-routing view (signed-out visitors redirect to sign-in), backoffice dashboard, pending approval, and the shadowed `web:pos_index` route.
+- URLs: `web/urls.py` exposes the root role-routing view (signed-out visitors redirect to sign-in), backoffice dashboard, and pending approval. The POS lives at `pos:pos_home`.
 - Views/utilities: `web/views.py`, `middleware.py`, `context_processors.py`, `meta.py`, and template tags under `web/templatetags/`.
 - Services/forms/signals: no business service or model form. Middleware and context processors are the cross-cutting layer.
 - Templates/frontend: `templates/web/*`, `templates/web/app/app_base.html`, and global `site.js` imports.
@@ -125,7 +125,7 @@
 
 ## Users
 
-`apps/users/models.py` extends `AbstractUser` with avatar storage and plain role properties derived from Django groups via `groups.filter(...).exists()`. `apps/users/decorators.py` turns them into `backoffice_required`, `manager_required`, `staff_required`, and `admin_required` view decorators. `UserConfig.ready()` seeds three role groups after migrations and imports `apps/users/signals.py`. Profile editing is in `apps/users/views.py`. Allauth owns login, signup, and logout routes.
+`apps/users/models.py` extends `AbstractUser` with avatar storage (`ImageField`) and plain role properties derived from Django groups via `groups.filter(...).exists()`. `apps/users/decorators.py` turns them into `backoffice_required`, `manager_required`, `staff_required`, and `admin_required` view decorators. `UserConfig.ready()` seeds three role groups after migrations and imports `apps/users/signals.py`. Profile editing is in `apps/users/views.py`. Allauth owns login and logout routes; signup is closed.
 
 ## Settings
 

@@ -27,7 +27,7 @@
   }
 }
 
-/* Pegasus CSS variables mapped to concrete Tailwind colors (DaisyUI removed) */
+# Store brand palette exposed as CSS variables for non-Tailwind consumers.
 
 :root {
   --primary: #2563eb;

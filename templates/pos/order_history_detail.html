@@ -14,10 +14,7 @@
           <form method="post" action="{% url 'pos:pos_order_history_print' order.pk %}" hx-post="{% url 'pos:pos_order_history_print' order.pk %}" hx-target="#pos-main" hx-swap="innerHTML" hx-disabled-elt="button" hx-indicator="button">
             {% csrf_token %}
             <button type="submit" class="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white shadow-sm shadow-teal-900/10 transition-all duration-150 hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/40 disabled:cursor-wait disabled:opacity-60">
-              <svg class="hidden h-4 w-4 animate-spin [.htmx-request_&]:block" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
+              {% include "pos/partials/components/spinner.html" with spinner_extras="[.htmx-request_&]:block" %}
               <span class="flex size-4 items-center justify-center [.htmx-request_&]:hidden">{% hgi_stroke name="printer" size="17" color="currentColor" stroke_width="2" %}</span>
               <span class="[.htmx-request_&]:hidden">Reprint receipt</span>
             </button>
@@ -29,10 +26,7 @@
               <form method="post" action="{% url 'pos:pos_order_ticket_print' order.pk ticket.ticket_type 'retry' %}" x-data="{ processing: false }" @submit="processing = true">
                 {% csrf_token %}
                 <button type="submit" :disabled="processing" class="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60">
-                  <svg class="hidden h-4 w-4 animate-spin" x-show="processing" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                  {% include "pos/partials/components/spinner.html" with spinner_alpine="processing" %}
                   <span class="flex size-4 items-center justify-center" x-show="!processing">{% hgi_stroke name="printer" size="17" color="currentColor" stroke_width="2" %}</span>
                   <span x-show="!processing">Retry {{ ticket.ticket_type }} cancel ticket</span>
                 </button>
@@ -46,10 +40,7 @@
               <form method="post" action="{% url 'pos:pos_order_ticket_print' order.pk ticket.ticket_type 'retry' %}" x-data="{ processing: false }" @submit="processing = true">
                 {% csrf_token %}
                 <button type="submit" :disabled="processing" class="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60">
-                  <svg class="hidden h-4 w-4 animate-spin" x-show="processing" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                  {% include "pos/partials/components/spinner.html" with spinner_alpine="processing" %}
                   <span class="flex size-4 items-center justify-center" x-show="!processing">{% hgi_stroke name="printer" size="17" color="currentColor" stroke_width="2" %}</span>
                   <span x-show="!processing">Retry {{ ticket.ticket_type }} ticket</span>
                 </button>
@@ -304,10 +295,7 @@
         <form method="post" action="{% url 'pos:pos_order_history_print' order.pk %}" hx-post="{% url 'pos:pos_order_history_print' order.pk %}" hx-target="#order-details-drawer" hx-swap="innerHTML" hx-push-url="false" hx-disabled-elt="button" hx-indicator="button" class="w-full">
           {% csrf_token %}
           <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white shadow-md shadow-teal-900/10 transition-all duration-150 hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/40 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60">
-            <svg class="hidden h-4 w-4 animate-spin [.htmx-request_&]:block" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
+            {% include "pos/partials/components/spinner.html" with spinner_extras="[.htmx-request_&]:block" %}
             <span class="flex size-4 items-center justify-center [.htmx-request_&]:hidden">{% hgi_stroke name="printer" size="17" color="currentColor" stroke_width="2" %}</span>
             <span class="[.htmx-request_&]:hidden">Print receipt</span>
           </button>

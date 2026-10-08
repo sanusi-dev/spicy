@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_not_required, login_required
 from django.shortcuts import redirect, render
 
-from apps.users.decorators import backoffice_required, staff_required
+from apps.users.decorators import backoffice_required
 
 
 @login_not_required
@@ -11,7 +11,7 @@ def home(request):
         if request.user.has_backoffice_access:
             return redirect("web:dashboard")
         if request.user.has_staff_role:
-            return redirect("web:pos_index")
+            return redirect("pos:pos_home")
         return redirect("web:pending_approval")
     return redirect("account_login")
 
@@ -127,11 +127,6 @@ def dashboard(request):
             ],
         },
     )
-
-
-@staff_required
-def pos_index(request):
-    return render(request, "pos/index.html")
 
 
 @login_required

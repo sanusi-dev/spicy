@@ -1,6 +1,9 @@
 """Staff workflow services — shift closing logic shared across apps."""
 
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -13,8 +16,9 @@ from apps.payments.models import ModeOfPayment
 from .models import ClosingPayment, OpeningPayment, POSClosingEntry, POSOpeningEntry, ShiftCashOut
 
 
-def collect_submitted_payment_totals(submitted_orders, payment_rows):
+def collect_submitted_payment_totals(submitted_orders, payment_rows) -> dict[int, Decimal]:
     """Return submitted payment totals per mode, net of cash change."""
+
     mode_ids = {payment.mode_of_payment_id for payment in payment_rows}
     if not mode_ids:
         return {}
@@ -36,7 +40,7 @@ def collect_submitted_payment_totals(submitted_orders, payment_rows):
     if not cash_mode_ids:
         return payment_totals
 
-    cash_change_totals = {}
+    cash_change_totals: dict[int, Decimal] = {}
     cash_orders = (
         submitted_orders.filter(payments__mode_of_payment_id__in=cash_mode_ids)
         .values("payments__mode_of_payment_id", "pk", "change_amount")
@@ -50,7 +54,7 @@ def collect_submitted_payment_totals(submitted_orders, payment_rows):
     return payment_totals
 
 
-def expected_closing_amounts(open_shift, period_start, period_end):
+def expected_closing_amounts(open_shift, period_start, period_end) -> list[dict[str, Any]]:
     """Compute expected drawer amounts: opening float + collected (net of change) - refunds - cash-outs."""
     submitted_orders = Order.objects.submitted_in_shift(open_shift, period_start, period_end)
     opening_payments = list(open_shift.opening_payments.select_related("mode_of_payment").all())
@@ -89,7 +93,7 @@ def expected_closing_amounts(open_shift, period_start, period_end):
     return rows
 
 
-def ensure_closing_draft(open_shift, cashier):
+def ensure_closing_draft(open_shift, cashier) -> POSClosingEntry:
     """Return the draft closing entry for this shift, creating it only when needed."""
     closing = POSClosingEntry.objects.filter(
         opening_entry=open_shift,
@@ -114,7 +118,7 @@ def ensure_closing_draft(open_shift, cashier):
 
 
 @transaction.atomic
-def open_shift(cashier, opening_amounts, remarks=""):
+def open_shift(cashier, opening_amounts, remarks="") -> POSOpeningEntry:
     """Open a shift with the declared opening float per payment mode."""
     from apps.settings.models import Restaurant
 
@@ -142,7 +146,7 @@ def open_shift(cashier, opening_amounts, remarks=""):
 
 
 @transaction.atomic
-def submit_closing_entry(closing, actor=None):
+def submit_closing_entry(closing, actor=None) -> None:
     """Compute expected amounts, validate, and close the opening entry."""
     if closing.status != POSClosingEntry.DRAFT:
         return
@@ -230,20 +234,24 @@ def submit_closing_entry(closing, actor=None):
             )
 
     locked.status = POSClosingEntry.SUBMITTED
-    locked.save(
-        update_fields=[
-            "period_end_date",
-            "bill_count",
-            "total_quantity",
-            "net_total",
-            "grand_total",
-            "refunded_total",
-            "total_short_excess",
-            "variance_note",
-            "status",
-            "updated_at",
-        ]
-    )
+    locked._allow_submit = True
+    try:
+        locked.save(
+            update_fields=[
+                "period_end_date",
+                "bill_count",
+                "total_quantity",
+                "net_total",
+                "grand_total",
+                "refunded_total",
+                "total_short_excess",
+                "variance_note",
+                "status",
+                "updated_at",
+            ]
+        )
+    finally:
+        del locked._allow_submit
     opening.closing_entry = locked
     opening.period_end_date = locked.period_end_date
     opening.save(update_fields=["closing_entry", "period_end_date", "updated_at"])
@@ -254,12 +262,16 @@ def submit_closing_entry(closing, actor=None):
         journal = post_cash_variance_gl(locked)
         if journal is not None:
             locked.variance_journal_entry = journal
-            locked.save(update_fields=["variance_journal_entry", "updated_at"])
+            locked._allow_submit = True
+            try:
+                locked.save(update_fields=["variance_journal_entry", "updated_at"])
+            finally:
+                del locked._allow_submit
     closing.refresh_from_db()
 
 
 @transaction.atomic
-def record_cash_out(opening, *, mode, amount, reason, note="", actor=None):
+def record_cash_out(opening, *, mode, amount, reason, note="", actor=None) -> ShiftCashOut:
     """Record a submitted cash-out voucher and post its GL legs."""
     from apps.accounting.services import post_shift_cash_out_gl
 
@@ -280,7 +292,7 @@ def record_cash_out(opening, *, mode, amount, reason, note="", actor=None):
 
 
 @transaction.atomic
-def cancel_cash_out(row, *, actor=None):
+def cancel_cash_out(row, *, actor=None) -> ShiftCashOut:
     """Cancel a cash-out voucher with a mirrored GL reversal."""
     is_manager = actor is not None and (actor.is_manager or actor.is_admin or actor.is_superuser)
     if not is_manager:

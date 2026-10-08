@@ -1,6 +1,8 @@
 import './htmx';
 import './alpine';
 import './order-details-drawer';
+import './pos-modal';
+import './money';
 import './logout';
 import './toast';
 import './confirm';

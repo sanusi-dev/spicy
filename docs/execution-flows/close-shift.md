@@ -10,11 +10,12 @@ Close shift navigation (rendered only for the shift opener or a Manager/Admin)
   -> _get_open_shift()
   -> POSOpeningEntry.can_be_closed_by()
   -> Order.objects.open_drafts()
+  -> Order.objects.cancelled_in_shift()
   -> staff.services.expected_closing_amounts()
   -> templates/pos/close_shift.html#surface
 ```
 
-GET never creates closing rows. It renders a client-side count preview. If drafts remain, it returns the blocking "Finish open orders first" surface.
+GET never creates closing rows. It renders a client-side count preview. If drafts remain, it returns the blocking "Finish open orders first" surface. When the shift has cancelled-after-send orders, the surface carries a blocking review block listing them with a confirmation checkbox.
 
 ## POS POST Submission
 
@@ -26,13 +27,15 @@ Counted amount form
   -> recheck open drafts
   -> staff.services.ensure_closing_draft()
   -> ClosingPaymentForm per opening mode (server-side: counted >= 0)
-  -> save counted values and closing period
+  -> reject unticked review of cancelled-after-send orders (typed amounts stay on the re-rendered form)
+  -> save counted values, variance_note, and closing period
   -> staff.services.submit_closing_entry()
   -> lock POSClosingEntry and POSOpeningEntry
   -> re-check can_be_closed_by(actor)
   -> aggregate orders/payments
   -> recompute expected and calculate differences
   -> reject non-cash counted above expected
+  -> apply the variance note/threshold gate
   -> submit closing and link opening
   -> HX home surface or redirect
 ```

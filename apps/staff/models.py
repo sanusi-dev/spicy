@@ -96,7 +96,9 @@ class POSOpeningEntry(BaseModel):
             from apps.settings.models import Restaurant
 
             # Restaurant row lock is the global mutex: two concurrent opens can't both pass the check.
-            Restaurant.objects.select_for_update().first()
+            settings = Restaurant.objects.select_for_update().first()
+            if settings is None:
+                raise ValidationError("Restaurant settings are not configured.")
             open_exists = (
                 POSOpeningEntry.objects.select_for_update()
                 .filter(
@@ -169,9 +171,27 @@ class OpeningPayment(BaseModel):
     def __str__(self):
         return f"{self.mode_of_payment.name}: {self.opening_amount}"
 
+    def save(self, *args, **kwargs):
+        if self.opening_entry_id:
+            status = POSOpeningEntry.objects.only("status").get(pk=self.opening_entry_id).status
+            if status != POSOpeningEntry.DRAFT:
+                raise ValidationError("Opening rows cannot change after the shift opens.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.opening_entry_id:
+            status = POSOpeningEntry.objects.only("status").get(pk=self.opening_entry_id).status
+            if status != POSOpeningEntry.DRAFT:
+                raise ValidationError("Opening rows cannot be deleted after the shift opens.")
+        return super().delete(*args, **kwargs)
+
 
 class POSClosingEntry(BaseModel):
     """End-of-shift reconciliation document. Links to a POSOpeningEntry."""
+
+    # Service-only transition flags — set and cleared around one status transition.
+    _allow_submit = False
+    _allow_cancel = False
 
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
@@ -230,6 +250,14 @@ class POSClosingEntry(BaseModel):
         return f"Closing #{self.pk} — {self.posting_date}"
 
     def save(self, *args, **kwargs):
+        allow_cancel = getattr(self, "_allow_cancel", False)
+        allow_submit = getattr(self, "_allow_submit", False)
+        if self.pk:
+            previous = type(self).objects.only("status").get(pk=self.pk)
+            if previous.status != self.DRAFT and not (allow_cancel or allow_submit):
+                raise ValidationError("Submitted or cancelled closing entries cannot be modified.")
+            if previous.status != self.DRAFT and self.status == self.SUBMITTED and not allow_submit:
+                raise ValidationError("Only the close service can submit a closing entry.")
         if self.opening_entry_id and self.period_start_date is None:
             self.period_start_date = self.opening_entry.period_start_date
         if self.opening_entry_id and not self.cashier_id:
@@ -271,7 +299,11 @@ class POSClosingEntry(BaseModel):
         self.cancelled_at = timezone.now()
         if by_user is not None:
             self.cancelled_by = by_user
-        self.save(update_fields=["status", "cancelled_at", "cancelled_by", "updated_at"])
+        self._allow_cancel = True
+        try:
+            self.save(update_fields=["status", "cancelled_at", "cancelled_by", "updated_at"])
+        finally:
+            del self._allow_cancel
 
 
 class ClosingPayment(BaseModel):
@@ -300,6 +332,20 @@ class ClosingPayment(BaseModel):
 
     def __str__(self):
         return f"{self.mode_of_payment.name}: closing {self.closing_amount} / expected {self.expected_amount}"
+
+    def save(self, *args, **kwargs):
+        if self.closing_entry_id:
+            status = POSClosingEntry.objects.only("status").get(pk=self.closing_entry_id).status
+            if status != POSClosingEntry.DRAFT:
+                raise ValidationError("Closing rows cannot change after the close leaves draft.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.closing_entry_id:
+            status = POSClosingEntry.objects.only("status").get(pk=self.closing_entry_id).status
+            if status != POSClosingEntry.DRAFT:
+                raise ValidationError("Closing rows cannot be deleted after the close leaves draft.")
+        return super().delete(*args, **kwargs)
 
     def clean(self):
         super().clean()

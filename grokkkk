@@ -1,0 +1,1146 @@
+## User
+
+so i have issue with understang the f2 issue at @OPEN_FINDINGS.md i have read about xss and i understand the concept but i just cant seem to understand this particulat issue in the codebase, how it happens, like the technical breakdown of how the affected part of the codebase work that made it an issue, the kind of explanation i want is like "this line at view does this, but its result produce this and it gave the result to this line at js script and it does it" like a breakdown that show how the the code execute step by step that cause the issue the exact part and stuff, i think the reason why i dont understand the issue is because i dont really understand how sweetalert integrate to this codebase to perform its task, i have the agent set it up, becasue i understand all the django part, the views and the template, i just dont understand how it become an issue with sweetalert, will you please save ffrom this mistery and teach me everytrhing from first principle, i could have asked the agent to fix but i wanna know it myself so that i can fix it myself whenever such issue surface and also be able to understand its an issue becaus of the agent hadnt flag it i would have knownw its and issue
+
+## Assistant
+
+I'll start from the F2 write-up and then walk the exact Django → SweetAlert path so the XSS is visible as code execution, not as a concept.
+
+## Tools
+
+- Read: /home/breezy/.grok/memory-v2/workspaces/spicy-b558a8bb/topics/preferences.md
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (1-200)
+- Search: F2
+
+## Assistant
+
+Next I’ll follow the confirm path from the template attributes through `confirm.js` into SweetAlert, so the XSS is a concrete execution sequence.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/assets/javascript/confirm.js
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html
+- Read: /home/breezy/Documents/dev/spicy/apps/users/views.py (1-43)
+- Read: /home/breezy/Documents/dev/spicy/apps/users/forms.py
+- Search: confirm\.js|data-confirm|Swal|sweetalert
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/menu/menu_detail.html (101-139)
+
+## Assistant
+
+I have the confirm path. Next I’ll check how names are stored and how SweetAlert is loaded, so the XSS can be traced from form save to dialog HTML.
+
+## Tools
+
+- Search: get_display_name
+- Read: /home/breezy/Documents/dev/spicy/assets/javascript/toast.js
+- Search: confirm
+- Read: /home/breezy/Documents/dev/spicy/apps/users/models.py (1-57)
+- Search: vite_asset|confirm
+- ListDir: assets/javascript
+- Read: /home/breezy/Documents/dev/spicy/assets/javascript/site.js
+- Search: vite_asset|site
+- Search: first_name
+- Read: /home/breezy/Documents/dev/spicy/templates/account/profile.html (1-20)
+
+## Assistant
+
+**F2 is stored XSS caused by a second HTML parse.** Django escapes the name when it writes the page. The browser then unescapes that same string when JavaScript reads it from `dataset`. SweetAlert’s `html:` option parses that restored string as HTML, so a name that looks like a tag becomes a real tag in the superuser’s dialog.
+
+The Django views and templates are doing what you think they are. The hole is the hand-off from the template into SweetAlert.
+
+---
+
+## First principles: three facts
+
+### 1. SweetAlert2 is just JavaScript that draws a modal
+
+It is an npm package (`sweetalert2`). Vite bundles it into `site.js`. It is not part of Django.
+
+When JS calls `Swal.fire({ ... })`, the library creates a dialog in the page and fills it from the options you pass. Two of those options matter:
+
+| Option | What SweetAlert does with the string |
+|---|---|
+| `text:` | Puts it in a **text node**. Angle brackets show as characters. |
+| `html:` | Feeds it to the browser’s **HTML parser** (same family of operation as `innerHTML`). Tags become elements. `onerror=` on an image runs. |
+
+That is the whole library, for this bug: a function that can either display a string or execute it as markup.
+
+### 2. This project never calls `window.confirm()`
+
+The agent built a small wrapper so every “are you sure?” dialog looks like SweetAlert.
+
+Load path:
+
+```text
+templates/web/base.html
+  {% vite_asset 'assets/javascript/site.js' %}
+        ↓
+assets/javascript/site.js
+  import './confirm';
+        ↓
+assets/javascript/confirm.js
+  import Swal from 'sweetalert2';
+```
+
+`confirm.js` does three things:
+
+1. Read the message off the clicked element: `element.dataset.confirmMessage`
+2. Open SweetAlert with that string in `html:`
+3. If the user clicks Confirm, continue the original action (HTMX request or form submit)
+
+Templates opt in with HTML attributes. They do not call SweetAlert themselves:
+
+```html
+data-confirm-title="Confirm Role Change"
+data-confirm-message="Change <strong>{{ entry.user.get_display_name }}</strong> from <strong>Admin</strong> to <strong>Manager</strong>?"
+data-confirm-btn="Yes, change"
+```
+
+`data-confirm-message` becomes `element.dataset.confirmMessage` in JS (hyphens become camelCase). That is the only bridge between Django and SweetAlert.
+
+### 3. Django auto-escape only protects the **first** HTML parse
+
+`{{ entry.user.get_display_name }}` is auto-escaped. If the name contains `<`, Django writes `&lt;` into the HTML source. That stops the name from becoming a tag **while the browser is building the staff-list page**.
+
+It does not freeze the string as escaped forever. When JS later reads `dataset.confirmMessage`, the browser gives back the **decoded** original, including the `<`.
+
+So: Django escaped for parse #1. JS + SweetAlert then run parse #2 on the decoded value.
+
+---
+
+## How a confirm actually runs (the wiring)
+
+Take the “Demote to Manager” button. It has both HTMX and confirm attributes:
+
+```74:81:templates/backoffice/settings/staff_list.html
+                  <button 
+                    hx-post="{% url 'settings:staff_assign_role' entry.user.pk 'manager' %}" 
+                    hx-target="#staff-row-{{ entry.user.pk }}" 
+                    hx-swap="outerHTML" 
+                    data-confirm-title="Confirm Role Change" 
+                    data-confirm-message="Change <strong>{{ entry.user.get_display_name }}</strong> from <strong>Admin</strong> to <strong>Manager</strong>?" 
+                    data-confirm-btn="Yes, change" 
+```
+
+Click sequence:
+
+```text
+Superuser clicks the button
+        ↓
+HTMX sees hx-post, fires the event `htmx:confirm`
+  (this is HTMX’s “ask first” hook; it has not sent the POST yet)
+        ↓
+confirm.js listener on `htmx:confirm` (line 28)
+  reads dataset.confirmMessage
+  calls e.preventDefault()     ← HTMX waits
+  calls showConfirm(button)
+        ↓
+showConfirm (line 15)
+  Swal.fire({
+    title: "Confirm Role Change",
+    html:  <the dataset string>,   ← THE SINK
+    ...
+  })
+        ↓
+User clicks “Yes, change”
+        ↓
+e.detail.issueRequest(true)    ← HTMX now sends the POST
+```
+
+The role-change view never sees the XSS. The payload runs in the browser **while the dialog is opening**, before the POST.
+
+There are two sibling listeners in the same file (plain `submit` and plain `click`) for buttons/forms that are not HTMX. Same `showConfirm`, same `html:` sink. The staff-list case is the HTMX one.
+
+---
+
+## The string at every step
+
+A cashier (or anyone with a login) opens Profile and saves:
+
+- First name: `<img src=x onerror=alert(1)>`
+- Last name: empty
+
+That is allowed. `CustomUserChangeForm` accepts `first_name` and `last_name` with no HTML stripping:
+
+```24:29:apps/users/forms.py
+class CustomUserChangeForm(UserChangeForm):
+    email = forms.EmailField(label=_("Email"), required=False)
+
+    class Meta:
+        model = CustomUser
+        fields = ("email", "first_name", "last_name")
+```
+
+`profile` saves it on POST:
+
+```11:17:apps/users/views.py
+@login_required
+def profile(request):
+    if request.method == "POST":
+        form = CustomUserChangeForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+```
+
+`get_display_name` returns `get_full_name()`, which is first + last, so the stored display name is exactly that payload.
+
+A superuser later opens User roles. Django renders the button. Auto-escape runs on `{{ entry.user.get_display_name }}` only. The surrounding `<strong>` is hardcoded in the template, so it stays as real tags.
+
+**Stage A — bytes Django sends (page HTML source)**
+
+```html
+data-confirm-message="Change <strong>&lt;img src=x onerror=alert(1)&gt;</strong> from <strong>Admin</strong> to <strong>Manager</strong>?"
+```
+
+At this moment the page is safe. The name is entities. The browser will not run `onerror` while painting the table.
+
+**Stage B — what the DOM stores after it parses the attribute**
+
+HTML attribute parsing decodes entities. The live attribute value is now:
+
+```text
+Change <strong><img src=x onerror=alert(1)></strong> from <strong>Admin</strong> to <strong>Manager</strong>?
+```
+
+Django’s escape has been undone. This is normal HTML behaviour, not a Django bug.
+
+**Stage C — `confirm.js` line 3–4**
+
+```javascript
+function confirmMessage(element) {
+  return element.dataset.confirmMessage || element.dataset.confirmBody || '';
+}
+```
+
+`dataset.confirmMessage` returns that decoded string. JS now holds a string that contains a real `<img ...>` tag.
+
+**Stage D — `confirm.js` line 16–18**
+
+```javascript
+return Swal.fire({
+  title: confirmTitle(element),
+  html: confirmMessage(element),
+```
+
+SweetAlert takes that string and HTML-parses it into the dialog body.
+
+**Stage E — the dialog DOM**
+
+```html
+Change <strong><img src=x onerror=alert(1)></strong> from <strong>Admin</strong> to <strong>Manager</strong>?
+```
+
+The browser creates an `img`, the image fails to load, `onerror` runs **as the superuser**. That is the XSS.
+
+```text
+Profile POST
+  → first_name stored in DB
+      → staff_list.html interpolates it into data-confirm-message
+          → Django escapes  <  to  &lt;     (parse #1, safe)
+              → browser attribute decode restores  <
+                  → dataset.confirmMessage
+                      → Swal.fire({ html: ... })   (parse #2, unsafe)
+                          → onerror runs in superuser’s browser
+```
+
+---
+
+## Why the name in the table looks fine
+
+Same template, two uses of the same function:
+
+```42:43:templates/backoffice/settings/staff_list.html
+                <div class="...">{{ entry.user.get_display_name|slice:":1"|upper }}</div>
+                <span class="text-sm font-semibold text-gray-900">{{ entry.user.get_display_name|title }}</span>
+```
+
+Those go into **text nodes**. Django escapes them, the browser displays `&lt;img ...&gt;` as the characters `<img ...>`. Nothing reads them back out and re-parses them.
+
+The dangerous copy is the one that left the template, travelled through `dataset`, and entered `html:`.
+
+That is the pattern: **escaped-in-template is not the same as safe-in-JavaScript.** Auto-escape answers “will this break the HTML document I am rendering?” It does not answer “will the next API I pass this to treat it as HTML again?”
+
+---
+
+## Why `html:` is there at all
+
+The wrapper used `html:` so the hardcoded `<strong>Admin</strong>` would render as bold, not as the characters `<strong>`.
+
+The template mixed two kinds of content in one attribute:
+
+- Trusted markup: `<strong>`, `Admin`, `Manager`
+- Untrusted text: `{{ entry.user.get_display_name }}`
+
+Once those share one string, SweetAlert cannot tell them apart. The whole string is HTML.
+
+`toast.js` is a useful contrast. Django messages go into `title:`, as a toast, and those messages are also built from `get_display_name()` in `apps/settings/views.py`. That is a related smell (`title` is HTML in SweetAlert2 as well), but F2’s proven sink is the confirm `html:` path.
+
+---
+
+## The menu-item copy of the same bug
+
+```120:120:templates/backoffice/menu/menu_detail.html
+                <button ... data-confirm-message="Remove {{ mi.item_name }} from this menu?" ...>
+```
+
+Same pipeline: item name in a data attribute → `dataset` decode → `html:`. Whoever can set a menu item name can store the payload. The staff-list case is worse because **any logged-in user** can set their own first name.
+
+---
+
+## How to recognise this class of bug
+
+Ask one question whenever user text meets JavaScript:
+
+**Does this string get parsed as HTML a second time?**
+
+Sinks that mean “yes”:
+
+- SweetAlert `html:` (and `title:` / `title` as HTML)
+- `element.innerHTML = ...`
+- `insertAdjacentHTML`
+- Alpine `x-html`
+- jQuery `.html()`
+
+Sources that look safe and are not, once they hit those sinks:
+
+- `{{ value }}` inside `data-*="..."` then `element.dataset.*`
+- `{{ value }}` inside `onclick="Swal.fire({ html: '...' })"`
+- JSON in a `<script>` type that you later pass to `html:`
+
+Django `|escape` / auto-escape does not close those. `|escapejs` is for embedding into a JS **literal** in the template. It does not help a value that is read from `dataset`.
+
+The tell in this codebase is specifically:
+
+```text
+template:  data-confirm-message="... {{ user-controlled }} ..."
+     +
+confirm.js:  html: confirmMessage(element)
+```
+
+Any `data-confirm-message` / `data-confirm-body` / `data-confirm-title` that interpolates `{{ }}` is in that family. Static sentences (submit journal, cancel receipt, and so on) are not XSS, because there is no user string to parse.
+
+---
+
+## What a correct fix does (without writing it for you)
+
+You need the user-controlled part to become a **text node**, and the bold labels to stay out of that string.
+
+The finding’s approach:
+
+1. In `showConfirm`, pass the message as `text:` instead of `html:`. SweetAlert will not parse tags in the name.
+2. Stop putting `<strong>` in `data-confirm-message`. Bold “Admin” in the template is what forced `html:` in the first place. Put emphasis in the static title, or build the dialog body in JS with `document.createTextNode(name)` plus your own `<strong>` for the known words.
+3. Optionally reject `<` and `>` in `first_name` / `last_name` so the payload cannot even be stored. That is defense in depth. The dialog still has to use `text:`, because names can be changed in the admin or a future form.
+4. Audit every `data-confirm-*` that contains `{{ }}`.
+5. Write a test that saves a name like `<img src=x onerror=alert(1)>`, renders the staff list, and asserts the response contains the escaped form in the attribute (`&lt;img`) **and** that your JS path would display it as text. The important assertion is “the dialog does not treat this as HTML.”
+
+The instinct that will keep you out of this later: **Django escaped it for the document. If JS takes it out of the document and asks the browser to parse HTML again, you are the one who undid the escape.**
+
+## User
+
+if understand this well, any context from the view that is stored in the db is not advisable to be put in a variable that will be executed by browser using js probably, because if a payload gets storeed at string in the db, then when it gets to the broswer, it will get executed, right?
+
+## Assistant
+
+**Almost. The danger is not “DB data in a JS variable.” The danger is “untrusted text treated as HTML or as JavaScript.”**
+
+Storing a name in the database is normal. Reading that name in JS is also normal. The payload runs only when some API **parses** that string instead of **displaying** it.
+
+---
+
+## The precise rule
+
+User-controlled text (from the DB, from a form, from a query string) is data. It becomes an XSS bug only at a **sink**: a place that tells the browser “this string is markup” or “this string is code.”
+
+| What you do with the string | What the browser does | Result |
+|---|---|---|
+| Put it in a Django text node: `{{ name }}` | Shows characters | Safe (auto-escaped) |
+| Put it in `data-*`, then read `dataset` and pass to SweetAlert `text:` | Shows characters | Safe |
+| Put it in `data-*`, then pass to SweetAlert `html:` | Parses tags | XSS if the string contains tags |
+| `element.textContent = name` | Shows characters | Safe |
+| `element.innerHTML = name` | Parses tags | XSS |
+| `eval(name)` / `new Function(name)` | Runs as JS | XSS |
+
+F2 is the third row. The name sat in the DB as a harmless string. It sat in `dataset` as a harmless string. SweetAlert `html:` is what promoted it to HTML.
+
+So: **storage is fine. A JS variable is fine. Interpretation as HTML/JS is the bug.**
+
+---
+
+## Why “anything from the view/DB” is too wide
+
+Almost every screen in Spicy shows DB data: item names, cashier names, order numbers, warehouse names. Those are supposed to reach the browser.
+
+This is safe:
+
+```html
+<span>{{ entry.user.get_display_name }}</span>
+```
+
+This is also safe:
+
+```javascript
+Swal.fire({ text: element.dataset.confirmMessage });
+```
+
+Same DB value, same trip through JS. The dialog shows the characters `<img src=x onerror=alert(1)>` and nothing runs.
+
+The staff-list table already does the safe version of this. Only the confirm dialog did the unsafe version.
+
+---
+
+## A better question to ask every time
+
+When you see user text heading toward JS, ask:
+
+**Will this string be inserted as text, or parsed as HTML/code?**
+
+- Text APIs: `textContent`, `innerText`, SweetAlert `text:`, Django `{{ }}` in a text node, `document.createTextNode`
+- Parse APIs: `innerHTML`, `insertAdjacentHTML`, SweetAlert `html:` / `title`, Alpine `x-html`, `document.write`, `eval`
+
+If it is a parse API, Django having escaped it in the template does not save you, because `dataset` (and JSON, and many other reads) give you the original characters back.
+
+That is the whole class: **untrusted string + HTML/JS parser.** The database is only how the string survived until a privileged user opened the page.
+
+## User
+
+okay, understood, so what is the best practice for this, to make the browser treat a data that is meant to be as text and not treat it a code, what the industry best practice, how can we wrewirte all the afftected area to follow this principle
+
+## Assistant
+
+Industry practice is: untrusted strings always go through a text API. I’ll audit every confirm/toast sink, then rewrite those paths so names and item labels never get parsed as HTML.
+
+## Tools
+
+- Search: data-confirm-(message|body|title|btn|button)
+- Search: Swal\.fire|innerHTML|html:\s*
+- Search: data-confirm
+- Read: /home/breezy/Documents/dev/spicy/docs/README.md (1-80)
+- Search: django-messages|showMessages
+- Search: staff_list|get_display_name
+- ListDir: apps/settings/tests
+- Search: confirm\.js|SweetAlert|data-confirm
+- Read: /home/breezy/Documents/dev/spicy/docs/frontend/overview.md (1-55)
+- Search: confirm
+- Read: /home/breezy/Documents/dev/spicy/apps/settings/tests/test_views.py (1-181)
+- Search: menu_item_delete|menu_detail
+- Search: gl_mapping
+- Read: /home/breezy/Documents/dev/spicy/docs/frontend/htmx.md (1-44)
+- Read: /home/breezy/Documents/dev/spicy/package.json
+- ListDir: apps/menu/tests
+- ListDir: apps/payments/tests
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/side-effects.md (1-50)
+- Search: class Test
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (251-272)
+- Read: /home/breezy/Documents/dev/spicy/apps/menu/tests/test_views.py (1-101)
+- Read: /home/breezy/Documents/dev/spicy/apps/payments/tests/test_payment_gl_mapping.py (1-42)
+- ListDir: apps/web/tests
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/payments/gl_mapping_list.html (26-45)
+- Search: item_name
+- Search: gl_mapping
+- Read: /home/breezy/Documents/dev/spicy/apps/menu/models.py (21-50)
+- Read: /home/breezy/Documents/dev/spicy/apps/web/tests/test_middleware.py (1-40)
+- Search: path\(
+- Read: /home/breezy/Documents/dev/spicy/docs/frontend/overview.md (45-55)
+
+## Assistant
+
+The industry rule is: untrusted strings go through a text API (`textContent`, SweetAlert `text:` / `titleText`). I’ll apply that at the shared SweetAlert wrapper so every confirm dialog follows it, then strip the leftover `<strong>` markup that only existed for `html:`.
+
+## Tools
+
+- Edit: /home/breezy/Documents/dev/spicy/assets/javascript/confirm.js
+- Edit: /home/breezy/Documents/dev/spicy/assets/javascript/toast.js
+- Edit: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html
+- Edit: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html
+- Edit: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html
+- Edit: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/settings/staff_list.html (72-101)
+- Search: html: confirmMessage|<strong>
+- Edit: /home/breezy/Documents/dev/spicy/apps/settings/tests/test_views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/menu/tests/test_views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/tests/test_confirm_dialogs.py
+- Edit: /home/breezy/Documents/dev/spicy/docs/frontend/htmx.md
+- Edit: /home/breezy/Documents/dev/spicy/docs/architecture/side-effects.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Search: F2
+- Edit: /home/breezy/Documents/dev/spicy/docs/frontend/overview.md
+- Search: BASE_DIR
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (1-15)
+- Execute: make test ARGS='apps.web.tests.test_confirm_dialogs apps.settings.tests.test_views.TestStaffManagementViews.test_staff_confirm_message_keeps_display_name_as_text apps.menu.tests.test_views.TestMenuViews.test_menu_detail_confirm_message_keeps_item_name_as_text' (Run XSS confirm-dialog regression tests)
+- Read: /home/breezy/Documents/dev/spicy/Makefile (1-80)
+- Search: postgres|docker
+- Execute: docker compose up -d db (Start Postgres so Django tests can run)
+- Execute: until docker compose exec db pg_isready -d spicy -U postgres >/dev/null 2>&1; do sleep 1; done && make test ARGS='apps.web.tests.test_confirm_dialogs apps.settings.tests.test_views.TestStaffManagementViews.test_staff_confirm_message_keeps_display_name_as_text apps.menu.tests.test_views.TestMenuViews.test_menu_detail_confirm_message_keeps_item_name_as_text' (Wait for DB then run XSS tests)
+
+## Assistant
+
+**Industry practice is: encode for the context you insert into, and prefer text APIs for untrusted strings.** Storage in the DB is fine. A JS variable is fine. The browser must receive that string as a **text node**.
+
+OWASP’s XSS cheat sheet is this, in order:
+
+1. **Output encoding / a safe sink** — the real control.
+2. **Keep trusted markup separate from user text** — never concatenate `"<strong>" + name + "</strong>"` into one HTML string.
+3. **Input checks** — optional extra, not the primary fix. Rejecting `<` in a name does not protect an item name, a payment mode, or the next field you add.
+
+SweetAlert’s mapping of that rule:
+
+| Untrusted string | Safe option | Unsafe option |
+|---|---|---|
+| Dialog body | `text:` | `html:` |
+| Dialog title | `titleText:` | `title:` |
+
+`text:` / `titleText:` call the text-node path. Tags show as characters.
+
+---
+
+## The rewrite that follows that rule
+
+The bug was one shared sink. Every confirm dialog in the app goes through `confirm.js`. Fixing that file once is the practice; chasing each template is how the next name field gets missed.
+
+**1. The wrapper now uses text APIs**
+
+`showConfirm` used to pass the dataset string to `html:`. It now passes it to `text:` and `titleText:`.
+
+That covers every `data-confirm-*` dialog: staff roles, menu item remove, GL mapping delete, cash-out, journals, stock documents, P&L submit, and the rest. Those templates can still interpolate `{{ name }}`. Django escapes the attribute for the page. SweetAlert then displays the decoded characters as text.
+
+**2. Markup left the user-data path**
+
+Staff-list messages had hardcoded `<strong>` around the name and the role so `html:` would bold them. With `text:`, those tags would have shown on screen as the characters `<strong>`. They are gone. The sentence is now plain:
+
+`Change {{ entry.user.get_display_name }} from Admin to Manager?`
+
+**3. Toasts follow the same rule**
+
+Django messages can include `get_display_name()`. `toast.js` used `title:`, which SweetAlert parses as HTML. It now uses `titleText:`.
+
+Menu item names and payment-mode names in confirm attributes needed no template rewrite. They were already plain sentences. The wrapper was the hole.
+
+---
+
+## How to apply this the next time
+
+When user text meets JS, pick the API by what it does:
+
+- `textContent`, `createTextNode`, SweetAlert `text:` / `titleText:` → display
+- `innerHTML`, `insertAdjacentHTML`, SweetAlert `html:` / `title`, Alpine `x-html` → parse
+
+If you want bold “Admin” next to a name, build two nodes in JS: a `<strong>` you wrote, and a text node for the name. Do not join them into one HTML string.
+
+A payload in the DB is only XSS when a sink parses it. The tests lock that contract: a name of `<img src=x onerror=alert(1)>` is stored, the staff list and menu detail render `&lt;img ...&gt;` in the attribute, and `confirm.js` must keep `text:` / `titleText:`.
+
+F2 is closed in `OPEN_FINDINGS.md`. Playwright is not available here, so the dialog click itself was not exercised in a browser; the Django tests and the JS contract tests passed.
+
+## User
+
+fix f3 also, but let me know if you will be following the fix in the document or you have a better soltution or need my input how to fix it
+
+## Assistant
+
+I’ll read F3 against the current inventory guards and the Order/JournalEntry pattern, then tell you whether the documented fix is the one to implement.
+
+## Tools
+
+- Read: /home/breezy/.grok/memory-v2/workspaces/spicy-b558a8bb/topics/restpos.md (1-41)
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (8-37)
+- Search: _allow_|status.*DRAFT|def save
+- Search: _allow_|def save
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_admin_bypass.py
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_ledger_guards.py
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (281-480)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/models.py (201-250)
+- Read: /home/breezy/Documents/dev/spicy/apps/accounting/models.py (286-375)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/admin.py
+- Search: status
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (2-31)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (481-540)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (701-850)
+- Search: status\s*=
+- Search: _allow_|objects\.create
+- Search: F3|private-flag|_allow_submit
+- Read: /home/breezy/Documents/dev/spicy/apps/accounting/models.py (171-240)
+- Search: StockLedgerEntry\.objects\.create|StockEntry\.objects\.create|PurchaseReceipt\.objects\.create|StockReconciliation\.objects\.create
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (431-480)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (851-890)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (1001-1050)
+- Search: def save
+- Search: locked\.status|_allow_
+- Search: \.status =
+- Search: StockLedgerEntry
+- Search: Cannot modify a
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/data-model.md (1-80)
+- Search: StockLedgerEntry\.objects\.(create|bulk_create)
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/data-model.md (121-140)
+- Read: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md (2-51)
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/apps.md (126-150)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_entry.py (2-81)
+- Search: status.*SUBMITTED|Cannot modify
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (671-700)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (2-41)
+- Read: /home/breezy/Documents/dev/spicy/docs/database/transactions.md (41-49)
+
+## Assistant
+
+I’ll follow the documented fix: the Order/JournalEntry private-flag pattern, reject non-draft creates, freeze `status` in admin, and block unguarded ledger inserts. One tightening: the ledger guard lives on `save()` as well as `Manager.create()`, so `StockLedgerEntry(...).save()` cannot skip the manager. Implementing that now.
+
+## Tools
+
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/models.py
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (17-66)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (319-368)
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/admin.py
+- Search: locked\.save\(|status = \"SUBMITTED\"|status = \"CANCELLED\"
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/admin.py (25-44)
+- Search: persist_inventory_lifecycle
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_ledger_guards.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_ledger_guards.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_admin_bypass.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_admin_bypass.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_admin_bypass.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_document_lifecycle_guards.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_document_lifecycle_guards.py
+- Edit: /home/breezy/Documents/dev/spicy/docs/architecture/data-model.md
+- Edit: /home/breezy/Documents/dev/spicy/docs/architecture/apps.md
+- Edit: /home/breezy/Documents/dev/spicy/docs/database/transactions.md
+- Edit: /home/breezy/Documents/dev/spicy/docs/architecture/side-effects.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Read: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md (44-58)
+- Search: \bF3\b
+- Execute: uv run ruff check apps/inventory/models.py apps/inventory/services.py apps/inventory/admin.py apps/inventory/tests/test_ledger_guards.py apps/inventory/tests/test_admin_bypass.py apps/inventory/tests/test_document_lifecycle_guards.py && uv run ruff format apps/inventory/models.py apps/inventory/services.py apps/inventory/admin.py apps/inventory/tests/test_ledger_guards.py apps/inventory/tests/test_admin_bypass.py apps/inventory/tests/test_document_lifecycle_guards.py (Lint and format inventory F3 changes)
+- Edit: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/tests/test_review_fixes.py (176-225)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/tests/test_review_fixes.py (1-40)
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/tests/test_review_fixes.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/tests/test_review_fixes.py
+- Search: status = \"SUBMITTED\"
+
+## Assistant
+
+**I followed the F3 fix in `OPEN_FINDINGS.md`.** It matches the Order and JournalEntry pattern already in the codebase. I did not need a different design from you.
+
+One tightening still inside that design: the ledger guard is on **`save()` as well as `Manager.create()`**. A custom manager alone would miss `StockLedgerEntry(...).save()`. `_create_entry_locked` now inserts through a private `objects._insert` path that sets `_allow_create`.
+
+---
+
+## What changed
+
+**Documents (Stock Entry, Reconciliation, Purchase Receipt)**
+
+- New rows must start as `DRAFT`.
+- Status may leave `DRAFT` only when a service sets `_allow_submit` or `_allow_cancel`.
+- Submit/cancel services save through `persist_inventory_lifecycle`.
+- Django admin keeps `status` read-only on drafts.
+
+**Ledger**
+
+- `objects.create`, `bulk_create`, and an unflagged `save()` raise: use `create_entry()`.
+- `_create_entry_locked` still updates the Bin, then inserts through the private path.
+
+A `QuerySet.update()` can still skip `save()`. That is a separate hole, already noted in `docs/database/transactions.md`. F3 was the `.save()` / admin / `objects.create` path.
+
+F3 is closed in `OPEN_FINDINGS.md`. Guard tests plus the existing stock-entry, receipt, reconciliation, and view tests passed.
+
+## User
+
+what is f5 trying to say?
+
+## Assistant
+
+I’ll read F5 against the transfer-cancel code so I can explain what actually happens, not just what the write-up claims.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (21-60)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (462-711)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (581-630)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (381-460)
+- Search: source_warehouse|target_warehouse
+
+## Assistant
+
+**F5 is saying: cancelling a transfer can mark the document cancelled without putting the stock back where it actually went.**
+
+The cancel path rebuilds the Store → Kitchen/Bar route from **today’s settings**. Submit already wrote the real warehouses on each line. Cancel ignores those snapshots. If the lookup fails, it skips the line and still stamps the whole transfer `CANCELLED`.
+
+---
+
+## What a transfer is supposed to do
+
+Submit of a `MATERIAL_TRANSFER` does this:
+
+```text
+Store  ── qty ──►  Kitchen (FOOD) or Bar (DRINKS)
+         SLE out              SLE in
+```
+
+On the way it writes the actual warehouses onto the line:
+
+```414:416:apps/inventory/services.py
+            detail.source_warehouse = restaurant.store_warehouse
+            detail.target_warehouse = target
+```
+
+Those two fields exist so cancel can reverse **that** move, even if settings change later.
+
+---
+
+## What cancel actually does
+
+`cancel_stock_entry` for a transfer does **not** read `detail.source_warehouse` / `detail.target_warehouse`.
+
+It asks live settings:
+
+```481:489:apps/inventory/services.py
+        restaurant = Restaurant.load()
+        targets = {}
+        if restaurant:
+            units = {u.department: u for u in ProductionUnit.objects.all()}
+            food_unit = units.get(ProductionUnit.FOOD)
+            if food_unit:
+                targets["FOOD"] = food_unit.warehouse
+            if restaurant.default_warehouse_id:
+                targets["DRINKS"] = restaurant.default_warehouse
+```
+
+Then for each line:
+
+1. Pick today’s warehouse for that item’s department.
+2. If there is no target, **`continue`** — skip the line.
+3. If Store or destination bin is missing, **`continue`** again.
+4. After the loop, the document is still saved as `CANCELLED`.
+
+```506:514:apps/inventory/services.py
+        for detail in details:
+            tgt = targets.get(detail.item.department)
+            if not tgt:
+                continue
+            ...
+            if not dest_bin or not store_bin:
+                continue
+```
+
+```690:692:apps/inventory/services.py
+    locked.status = "CANCELLED"
+    persist_inventory_lifecycle(locked, cancel=True, update_fields=["status", "updated_at"])
+```
+
+So “cancel” can mean: **paperwork reversed, stock left where submit put it.**
+
+---
+
+## Concrete example
+
+Monday you transfer 10 kg rice Store → Kitchen A. Submit snapshots `target_warehouse = Kitchen A`. Kitchen A now has the rice. Store is down 10 kg.
+
+Tuesday someone points the FOOD production unit at Kitchen B.
+
+Wednesday you cancel the transfer.
+
+Cancel looks up “current FOOD warehouse” → Kitchen B.
+
+Two bad outcomes:
+
+| Kitchen B state | What the code does | Result |
+|---|---|---|
+| No bin for rice | `continue`, then `CANCELLED` | Kitchen A still has 10 kg. Store still missing 10 kg. Document says the transfer never happened. |
+| Has 10 kg from some other receipt | Takes rice from Kitchen B, puts it in Store | Kitchen A still has the original 10 kg. Kitchen B is short. Stock appeared in one place and vanished from another. |
+
+The first case is silent loss of the reversal. The second case moves the wrong warehouse’s stock.
+
+Same shape if Store is reassigned, or a bin row is deleted.
+
+---
+
+## The third, smaller hole
+
+When it does reverse, it needs the original Store SLE to know what value left Store.
+
+```542:547:apps/inventory/services.py
+            if orig_store is not None:
+                orig_value = money(abs(orig_store.stock_value_change))
+                unit_rate = orig_store.unit_rate
+            else:
+                orig_value = curr_value
+                unit_rate = dest_wac
+```
+
+If that original SLE is missing, it sets `orig_value = curr_value`. Variance becomes zero. The books look balanced. The missing original value is never shown.
+
+Receipt cancel already compares original booked value vs today’s WAC and posts the difference. Transfer cancel hides that difference when the original Store SLE is gone.
+
+---
+
+## One sentence
+
+Submit records “this rice went Store → Kitchen A.” Cancel asks “where does FOOD go **today**?”, skips the line if that answer is messy, and still marks the transfer cancelled.
+
+## User
+
+fix f5 also, follow the document unless you have a better way
+
+## Assistant
+
+I’ll follow the documented F5 fix: reverse from snapshotted warehouses, raise instead of skipping, and keep the document submitted when a warehouse or bin is missing. First I’ll read the cancel path and its tests.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (462-701)
+- Search: cancel.*transfer|MATERIAL_TRANSFER|source_warehouse
+- Read: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md (71-83)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_entry.py (116-294)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (291-380)
+- Search: cancel_stock_entry|warehouse reassigned|bin deleted
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/models.py (251-295)
+- Search: class Bin
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_entry.py (2-61)
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/side-effects.md (30-44)
+- Search: Transfer cancellation|rebuilds the source|current settings
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (2-36)
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (231-245)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (251-300)
+
+## Assistant
+
+I’ll reverse from the line snapshots (SLE as fallback), raise when a warehouse, bin, or original SLE pair is missing, and test reassignment as a successful restore from those snapshots.
+
+## Tools
+
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_entry.py
+- Search: account
+- Search: class Warehouse
+- Search: warehouse
+- Read: /home/breezy/Documents/dev/spicy/apps/settings/models.py (301-390)
+- Edit: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Read: /home/breezy/Documents/dev/spicy/docs/architecture/data-model.md (74-81)
+- Edit: /home/breezy/Documents/dev/spicy/docs/architecture/data-model.md
+
+## Assistant
+
+**I followed the documented F5 fix**, with one better test assertion.
+
+Cancel now reverses each transfer line from `source_warehouse` / `target_warehouse`. If a snapshot is missing, it uses the original SLE warehouses. A missing warehouse, bin, or original SLE pair raises inside the atomic block, so the document stays `SUBMITTED`. There is no `continue`, and no invented `orig_value`.
+
+The document asked for both new tests to raise. **Warehouse reassignment is the success case** once snapshots are used: Kitchen A still has the stock, so cancel must restore Kitchen A even if FOOD now points at Kitchen B. Raising there would leave stock stuck. The bin-deleted case raises, as specified.
+
+---
+
+## What changed
+
+`cancel_stock_entry` for `MATERIAL_TRANSFER`:
+
+1. Resolves Store and destination from the line snapshots (SLE fallback).
+2. Locks those bins.
+3. Raises if a bin or the original SLE pair is missing.
+4. Restores the destination at current WAC and the source at the original booked value.
+
+Tests in `test_stock_entry.py`:
+
+- Kitchen reassigned after submit → cancel restores original Kitchen and Store.
+- Destination bin deleted → raises, status stays `SUBMITTED`.
+- Original SLE pair deleted → raises, status stays `SUBMITTED`.
+
+Existing transfer cancel tests still pass. F5 is closed in `OPEN_FINDINGS.md`.
+
+## User
+
+fix f4 too
+
+## Assistant
+
+I’ll follow the documented F4 fix: reconciliation cancel should post WAC drift the same way receipt and stock-entry cancel already do. First I’ll read the current cancel paths and their tests.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (8-32)
+- Search: def cancel_stock_reconciliation|def cancel_purchase_receipt|def cancel_stock_entry
+- Search: cancel_stock_reconciliation|CANCELLATION_WAC
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (621-710)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (871-960)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (1031-1160)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_reconciliation.py (2-81)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_reconciliation.py (161-345)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/services.py (707-876)
+- Read: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_purchase_receipt.py (91-150)
+- Read: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md (61-83)
+
+## Assistant
+
+I’ll follow the document: stamp `CANCELLATION_WAC` on recon cancel, post SIH at today’s value and the counter-account at the original, and share that helper with receipt cancel.
+
+## Tools
+
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/inventory/tests/test_stock_reconciliation.py
+- Edit: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Search: stock_adjustment|\"variance\"
+- Search: mirrors the GL|mirror
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (219-225)
+- Edit: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md
+- Edit: /home/breezy/Documents/dev/spicy/docs/workflows/inventory.md
+
+## Assistant
+
+**F4 is fixed along the documented path.** Reconciliation cancel now treats WAC drift the same way receipt and stock-entry receipt cancel already did.
+
+When WAC moves between submit and cancel, the old code reversed stock at today’s WAC and mirrored yesterday’s GL 1:1. The two no longer matched, and nothing recorded the gap.
+
+Cancel now:
+
+1. Reverses each SLE at current WAC and stamps `CANCELLATION_WAC`.
+2. Posts SIH at today’s value.
+3. Posts the original counter-account (opening / adjustment / expense / wastage) at the booked value.
+4. Posts the difference to `Restaurant.inventory_price_variance_account`.
+
+That SLE/GL pair lives in `_reverse_sles_at_current_wac` and `_cancellation_wac_gl_rows`. Receipt cancel and stock-entry receipt cancel use the same helpers (the REF-1 share the finding asked for). Transfer cancel stays on its two-warehouse path.
+
+The new test submits an adjustment of 10 → 6 at ₦100, then a later receipt that lifts WAC to ₦140. Cancel puts 4 back at ₦140, credits adjustment ₦400, and credits variance ₦160.
+
+Existing recon, receipt, and stock-entry tests passed. F4 is closed in `OPEN_FINDINGS.md`.
+
+## User
+
+commit the cnhages and push
+
+## Assistant
+
+I’ll inspect the working tree and recent commit style, then split the work into atomic commits before pushing.
+
+## Tools
+
+- Execute: git status (Show working tree status)
+- Execute: git diff && git diff --cached (Show unstaged and staged diffs)
+- Execute: git log -15 --oneline (Show recent commit message style)
+- Execute: git branch -vv && git status -sb (Show branch tracking and ahead/behind)
+
+## Assistant
+
+The tree has more than the F2–F5 work. I’ll group the diffs into atomic commits so unrelated changes are not lumped together.
+
+## Tools
+
+- Execute: git diff --stat (Summarize changed files by size)
+- Execute: git diff -- pyproject.toml Makefile docker-compose.yml spicy/settings.py spicy/__init__.py spicy/celery.py package.json pegasus-config.yaml README.md PLAN.md FEATURES.md AGENTS.md (Diff celery/docs/config related files)
+- Execute: git diff -- apps/inventory/models.py apps/inventory/admin.py apps/inventory/services.py | head -c 8000 (Preview inventory model and service diffs)
+- Execute: git diff -- Makefile assets/styles/site-tailwind.css docs/README.md docs/frontend/htmx.md docs/frontend/overview.md docs/architecture/side-effects.md docs/database/transactions.md (Diff Makefile, CSS, and F2/F3 docs)
+- Execute: git diff --stat -- docs/ PLAN.md FEATURES.md (Stat docs-only change sizes)
+- Execute: git diff -- PLAN.md | rg -n '^[+-]' | rg -i 'celery|redis|F2|F3|F4|F5|confirm|lifecycle' | head -40 (Check PLAN.md for celery vs findings content)
+
+## Assistant
+
+I’ll split this into four commits: Celery/Redis removal, unused frontend packages, the SweetAlert XSS fix, then the inventory save/cancel holes. Docs go last.
+
+## Tools
+
+- Execute: git add \
+  .env.example \
+  .github/workflows/tests.yml \
+  .gitignore \
+  AGENTS.md \
+  Makefile \
+  README.md \
+  docker-compose.yml \
+  pegasus-config.yaml \
+  pyproject.toml \
+  uv.lock \
+  spicy/__init__.py \
+  spicy/celery.py \
+  spicy/settings.py \
+  apps/web/management/commands/bootstrap_celery_tasks.py \
+  apps/web/migrations/0002_drop_celery_beat_tables.py && \
+git commit -m "$(cat <<'EOF'
+chore: remove Celery and Redis
+EOF
+)" (Commit Celery and Redis removal)
+- Execute: git add package.json package-lock.json assets/styles/site-tailwind.css && \
+git commit -m "$(cat <<'EOF'
+chore: drop unused frontend packages
+EOF
+)" (Commit unused frontend package removal)
+- Execute: git add \
+  assets/javascript/confirm.js \
+  assets/javascript/toast.js \
+  templates/backoffice/settings/staff_list.html \
+  apps/settings/tests/test_views.py \
+  apps/menu/tests/test_views.py \
+  apps/web/tests/test_confirm_dialogs.py && \
+git commit -m "$(cat <<'EOF'
+fix: treat SweetAlert copy as text
+EOF
+)" (Commit SweetAlert XSS text-node fix)
+- Execute: git add \
+  apps/inventory/admin.py \
+  apps/inventory/models.py \
+  apps/inventory/services.py \
+  apps/inventory/tests/test_admin_bypass.py \
+  apps/inventory/tests/test_ledger_guards.py \
+  apps/inventory/tests/test_stock_entry.py \
+  apps/inventory/tests/test_stock_reconciliation.py \
+  apps/inventory/tests/test_document_lifecycle_guards.py \
+  apps/orders/tests/test_review_fixes.py && \
+git commit -m "$(cat <<'EOF'
+fix: close inventory save and cancel holes
+EOF
+)" (Commit inventory lifecycle and cancel fixes)
+- Execute: git add FEATURES.md PLAN.md OPEN_FINDINGS.md docs && \
+git status -sb (Stage remaining docs and check leftover files)
+- Execute: git commit -m "$(cat <<'EOF'
+docs: update findings and rewrite copy
+EOF
+)" && git status -sb && git log -6 --oneline (Commit docs and show resulting status)
+- Execute: git push origin main (Push five commits to origin main)
+
+## Assistant
+
+Pushed 5 commits to `origin/main`.
+
+| Commit | What |
+|---|---|
+| `2b5da3c` | `chore: remove Celery and Redis` |
+| `5b8cd36` | `chore: drop unused frontend packages` |
+| `b0b7387` | `fix: treat SweetAlert copy as text` |
+| `97f6f88` | `fix: close inventory save and cancel holes` |
+| `756a468` | `docs: update findings and rewrite copy` |
+
+## User
+
+fix f6-f17 also
+
+## Assistant
+
+I’ll read F6–F17 against the code, follow each documented fix unless a better path is clear, and work through them in order.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/OPEN_FINDINGS.md (1-220)
+- Read: /home/breezy/.grok/memory-v2/workspaces/spicy-b558a8bb/topics/preferences.md
+- Read: /home/breezy/Documents/dev/spicy/PLAN.md (1-80)
+- Tool: Ask: F12 needs a product decision before code. A cashier can currently cancel their own sent order (kitchen already cooking) with only a reason dropdown. Which policy should Spicy use?
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/services.py (141-250)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/services.py (601-650)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (851-1080)
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/views.py (161-220)
+
+## Assistant
+
+F12 is cashier cancel plus a blocking close review. I’ll keep going through F6–F17 against that decision.
+
+## Tools
+
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (501-580)
+- Search: def pos_order_settle|print_failures|settle_order
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/services.py (2-251)
+- Read: /home/breezy/Documents/dev/spicy/apps/accounting/services.py (301-400)
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/models.py (81-130)
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/services.py (111-240)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (1101-1210)
+- Read: /home/breezy/Documents/dev/spicy/spicy/urls.py
+- Read: /home/breezy/Documents/dev/spicy/apps/web/urls.py
+- Read: /home/breezy/Documents/dev/spicy/apps/web/views.py (1-20)
+- Read: /home/breezy/Documents/dev/spicy/spicy/settings.py (1-40)
+- Read: /home/breezy/Documents/dev/spicy/templates/pos/close_shift.html
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/sources.py (41-130)
+- Search: pos_index|web:pos_index
+- Search: cancel
+- Search: Z.report|z_report|cancelled
+- Read: /home/breezy/Documents/dev/spicy/spicy/settings_production.py
+- Read: /home/breezy/Documents/dev/spicy/.env.example
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/reports/_statement.html
+- Read: /home/breezy/.agents/skills/frontend-design/SKILL.md
+- Search: bill_count|z_report|Z-report
+- Read: /home/breezy/Documents/dev/spicy/apps/web/views.py (126-142)
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/views.py (121-170)
+- Search: SECRET_KEY|DEBUG
+- Search: GROSS_PROFIT|DIRECT
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (431-510)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/services.py (241-290)
+- Read: /home/breezy/Documents/dev/spicy/templates/backoffice/staff/closing_entry_detail.html (1-80)
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/models.py (186-245)
+- Search: electricity
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/views.py (251-300)
+- Read: /home/breezy/Documents/dev/spicy/apps/web/tests/test_auth_flow.py (31-110)
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/tests/test_compute.py (321-410)
+- Search: gross_profit|gp_food|GROSS_PROFIT
+- Read: /home/breezy/Documents/dev/spicy/.github/workflows/tests.yml (1-80)
+- Search: def closing_entry_submit
+- Read: /home/breezy/Documents/dev/spicy/docs/workflows/shifts.md (2-73)
+- Search: add_on_dialog|variant_confirmed
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/services.py (199-238)
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/tests/test_compute.py (171-200)
+- Search: variance_note
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/models.py (1-30)
+- Search: totals\[
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/services.py (251-330)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (741-790)
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/migrations/0010_shiftcashout.py (1-15)
+- ListDir: apps/staff/migrations
+- Read: /home/breezy/Documents/dev/spicy/spicy/settings.py (231-260)
+- Search: DATABASE
+- Search: daily_pnl_preview
+
+## Assistant
+
+I’ll implement the documented fixes now, starting with settlement printing and the lock/render split.
+
+## Tools
+
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (886-915)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py (949-1018)
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/views_pos.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/reports/views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/accounting/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/staff/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/staff/views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/urls.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/views.py
+- Read: /home/breezy/Documents/dev/spicy/apps/web/views.py (1-10)
+- Edit: /home/breezy/Documents/dev/spicy/templates/web/app/app_base.html
+- Edit: /home/breezy/Documents/dev/spicy/templates/backoffice/dashboard.html
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/tests/test_auth_flow.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/tests/test_auth_flow.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/web/views.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/reports/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/reports/services.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/reports/services.py
+- Read: /home/breezy/Documents/dev/spicy/apps/reports/services.py (169-198)
+- Read: /home/breezy/Documents/dev/spicy/apps/orders/models.py (71-100)
+- Edit: /home/breezy/Documents/dev/spicy/apps/orders/models.py
+- Edit: /home/breezy/Documents/dev/spicy/apps/reports/sources.py
+- Read: /home/breezy/Documents/dev/spicy/apps/staff/services.py (1-20)
+- Read: /home/breezy/Documents/dev/spicy/spicy/settings.py (2-26)

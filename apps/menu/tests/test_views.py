@@ -57,7 +57,7 @@ class TestMenuViews(MenuViewTestBase):
         self.assertNotContains(response, "Live on POS")
 
     def test_menu_detail_confirm_message_keeps_item_name_as_text(self):
-        payload = '<img src=x onerror=alert(1)>'
+        payload = "<img src=x onerror=alert(1)>"
         self.menu_item.item_name = payload
         self.menu_item.save(update_fields=["item_name"])
 

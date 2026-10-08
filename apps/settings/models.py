@@ -125,7 +125,10 @@ class Restaurant(BaseModel):
         null=True,
         blank=True,
         verbose_name="Variance approval threshold",
-        help_text="Cash difference that requires a manager note before a shift can be closed. Leave blank to allow any variance without a note.",
+        help_text=(
+            "Cash difference that requires a manager note before a shift can be closed."
+            " Leave blank to allow any variance without a note."
+        ),
     )
 
     default_payable_account = models.ForeignKey(

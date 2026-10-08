@@ -64,7 +64,7 @@ Foreign keys for historical business documents generally use `PROTECT` or `SET_N
 - `ItemGroup`: flat category.
 - `UOM`: unit of measure. `Item.stock_uom` is the countable unit for bins, the ledger, counts, and POS (Bottle, Kg, Litre, Each, Plate).
 - `Item`: item master with independent `is_sales_item`, `is_stock_item`, and `is_purchase_item` flags. `has_variants=True` makes it a non-sellable/non-purchasable template in `Item.save()`. `Item.save()` rejects `stock_uom` changes and stock/purchase switches while conversion rows exist.
-- `ItemUOMConversion`: one bulk purchase unit per item (`unique (item, uom)`), converting bulk → stock (`1 Crate = 24 Bottle`). `uom` cannot equal the item's stock UOM. `conversion_factor > 0`. Rows require enabled items with stock and purchase flags. Virtual sellable food cannot carry rows.
+- `ItemUOMConversion`: one bulk purchase unit per item (`unique (item, uom)`), converting bulk → stock (`1 Crate = 24 Bottle`). `uom` cannot equal the item's stock UOM. `conversion_factor > 0`. Rows require enabled items with stock and purchase flags. Virtual sellable food cannot carry rows. Once a stock movement exists for the item at or after a row's creation, editing the factor or deleting the row is rejected — historical SLEs hold blended WAC with no link back to the factor, so a used row must stay as-is and a new row carries any change.
 - `Menu`: named enabled collection.
 - `MenuItem`: priced item on a menu, unique per menu/item, with denormalized name and special/disabled flags.
 - `ItemAddOn`: parent/add-on relationship. The add-on price is resolved from the active menu. It is not stored here.
@@ -97,9 +97,10 @@ Foreign keys for historical business documents generally use `PROTECT` or `SET_N
 ## Shift and Payment Entities
 
 - `POSOpeningEntry`: global shift parent. Open means `SUBMITTED` with no closing link. Closed means `SUBMITTED` with a closing link. `can_be_closed_by(user)` returns True for the opening cashier or a Manager/Admin.
-- `OpeningPayment`: mode-specific opening balance.
+- `OpeningPayment`: mode-specific opening balance. Saves and deletes are rejected once the parent shift leaves `DRAFT` — opening rows are frozen with the shift.
+- `POSClosingEntry`: `save()` rejects any write to a `SUBMITTED` or `CANCELLED` close unless the service sets `_allow_submit` / `_allow_cancel` (the same pattern as `Order` and `JournalEntry`). The cancel path flips the status through its own flag; re-submission of a cancelled close stays impossible. All four shift-document Django-admin registrations are view-only.
+- `ClosingPayment`: counted, expected, and difference values per opening mode. Saves and deletes are rejected once the parent close leaves `DRAFT` — a submitted reconciliation cannot be overwritten under the ORM, and the Z-report always matches its variance journal.
 - `POSClosingEntry`: one-to-one reconciliation document linked to the opening. Stores shift sales at submit (`bill_count`, `total_quantity`, `net_total`, `grand_total`, `refunded_total` — frozen, never recomputed live). Carries `variance_note` (required beyond the approval threshold) and `variance_journal_entry` (linked JE when the close posts a variance).
-- `ClosingPayment`: counted, expected, and difference values per opening mode.
 - `ShiftCashOut`: mid-shift cash-out voucher (SUBMITTED → CANCELLED, no draft). Submitted rows reduce the mode's expected drawer amount.
 - `ModeOfPayment`: enabled payment master with one conditional default.
 - `PaymentGLMapping`: one-to-one mode-to-ledger-account mapping (`default_account` is a `LedgerAccount` FK, leaf-only).
@@ -134,7 +135,7 @@ The current schema is the result of substantial cleanup migrations. The older pl
 
 - `settings/0017_single_location_data.py` and `0018_remove_restaurant_branch_remove_posprofile_branch_and_more.py`: move toward the single Restaurant configuration and remove Branch/POSProfile structures.
 - `settings/0023_restaurant_singleton_key_and_more.py` and `0024_restaurant_store_warehouse_and_more.py`: enforce the singleton key and central Store warehouse semantics.
-- `inventory/0014_hardcode_fifo.py`, `0015_simplify_stock_entry.py`, and `0019_item_sales_purchase_flags.py`: establish current FIFO and independent item flags.
+- `inventory/0014_hardcode_fifo.py` (its name is a leftover from a discarded plan), `0015_simplify_stock_entry.py`, and `0019_item_sales_purchase_flags.py`: independent item flags for the current weighted-average (PWAC) ledger — no FIFO queue exists at runtime.
 - `inventory/0022_stockreconciliation_reason_and_more.py` through `0025_alter_item_image.py`: required reconciliation reasons and current item image default.
 - `menu/0006_remove_pricelist_menu_delete_itemprice_and_more.py`: remove legacy PriceList/ItemPrice models.
 - `payments/0003_alter_paymentglmapping_options_and_more.py` and `0004_modeofpayment_payments_one_default_mode.py`: current one-to-one GL mapping and one-default invariant.

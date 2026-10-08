@@ -1,4 +1,3 @@
-import hashlib
 import uuid
 
 from django.contrib.auth.models import AbstractUser
@@ -13,7 +12,7 @@ def _get_avatar_filename(instance, filename):
 
 
 class CustomUser(AbstractUser):
-    avatar = models.FileField(upload_to=_get_avatar_filename, blank=True, validators=[validate_profile_picture])
+    avatar = models.ImageField(upload_to=_get_avatar_filename, blank=True, validators=[validate_profile_picture])
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"
@@ -22,18 +21,6 @@ class CustomUser(AbstractUser):
         if self.get_full_name().strip():
             return self.get_full_name()
         return self.email or self.username
-
-    @property
-    def avatar_url(self) -> str:
-        if self.avatar:
-            return self.avatar.url
-        else:
-            return f"https://www.gravatar.com/avatar/{self.gravatar_id}?s=128&d=identicon"
-
-    @property
-    def gravatar_id(self) -> str:
-        # https://en.gravatar.com/site/implement/hash/
-        return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
 
     @property
     def is_admin(self):

@@ -36,6 +36,14 @@ class AccountingViewAccessTest(AccountingViewTestBase):
         self.assertEqual(response.status_code, 302)
 
 
+class GLRegisterMalformedFilterTest(AccountingViewTestBase):
+    def test_register_tolerates_bad_account_values(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("accounting:gl_entry_list"), {"account": "not-a-number"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("accounting:gl_entry_list"))
+
+
 class JournalEntryViewTest(AccountingViewTestBase):
     def test_submit_journal_entry(self):
         self.client.force_login(self.admin)

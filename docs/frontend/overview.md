@@ -27,7 +27,7 @@ flowchart TD
 - `templates/web/public_base.html`: public sign-in/sign-up shell with the Spicy lockup in the navbar and footer.
 - `templates/web/app/app_base.html`: backoffice navigation and `#app-content` target.
 - `templates/pos/base.html`: full-height POS shell, user menu, POS navigation, and `#pos-main` target.
-- `templates/pos/index.html`: POS surface with inline partials `surface`, `catalog_workspace`, `cart`, and `payment_dialog`.
+- `templates/pos/index.html`: POS surface with inline partials `surface`, `catalog_workspace`, and `cart`.
 
 ## POS DOM Surfaces
 
@@ -38,7 +38,7 @@ flowchart TD
 | `#catalog-workspace` | catalog workspace | search, category, special filters |
 | `#catalog-grid` | out-of-band grid | cart mutations with `catalog_oob` |
 | `#payment-dialog-container` | payment dialog | GET settle |
-| `#add-on-dialog-container` | add-on dialog | GET add-on dialog |
+| `#catalog-dialog-container` | add-on and variant service dialogs | GET add-on/variant dialogs |
 | `#order-details-drawer` | history drawer partial | history row/detail print |
 
 ## Backoffice Frontend

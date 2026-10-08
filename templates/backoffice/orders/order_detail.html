@@ -15,24 +15,24 @@
       {% endif %}
       {% if user.is_manager or user.is_admin or user.is_superuser %}
         {% if order.status == "SUBMITTED" and not order.is_return %}
-          <button onclick="Swal.fire({title:'Process Return?',text:'This creates a return draft with negative items and payments.',icon:'question',showCancelButton:true,confirmButtonColor:'#f59e0b',cancelButtonColor:'#6b7280',confirmButtonText:'Create Return Draft'}).then((r)=>{if(r.isConfirmed)document.getElementById('return-form').submit()})" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-600 text-sm font-semibold hover:bg-amber-50 transition-all">Create return</button>
-          <form id="return-form" method="post" action="{% url 'orders:order_return' order.pk %}" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
+          <button type="submit" form="return-form" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-amber-200 text-amber-600 text-sm font-semibold hover:bg-amber-50 transition-all">Create return</button>
+          <form id="return-form" method="post" action="{% url 'orders:order_return' order.pk %}" class="hidden" data-confirm-title="Process return?" data-confirm-body="This creates a return draft with negative items and payments." data-confirm-button="Create return" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
             {% csrf_token %}
           </form>
         {% elif order.status == "DRAFT" and order.is_return %}
-          <button onclick="Swal.fire({title:'Submit Return?',text:'This restores drink stock and records the refunds against the source payments.',icon:'question',showCancelButton:true,confirmButtonColor:'#f59e0b',cancelButtonColor:'#6b7280',confirmButtonText:'Submit Return'}).then((r)=>{if(r.isConfirmed)document.getElementById('return-submit-form').submit()})" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-all">Submit return</button>
-          <form id="return-submit-form" method="post" action="{% url 'orders:order_return_submit' order.pk %}" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
+          <button type="submit" form="return-submit-form" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-all">Submit return</button>
+          <form id="return-submit-form" method="post" action="{% url 'orders:order_return_submit' order.pk %}" class="hidden" data-confirm-title="Submit return?" data-confirm-body="This restores drink stock and records the refunds against the source payments." data-confirm-button="Submit return" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
             {% csrf_token %}
           </form>
-          <button onclick="Swal.fire({title:'Delete Draft?',text:'This deletes the draft entirely, including its items and audit trail.',icon:'warning',showCancelButton:true,confirmButtonColor:'#dc2626',cancelButtonColor:'#6b7280',confirmButtonText:'Delete Draft'}).then((r)=>{if(r.isConfirmed)document.getElementById('delete-draft-form').submit()})" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-semibold hover:bg-red-100 transition-all">Delete draft</button>
-          <form id="delete-draft-form" method="post" action="{% url 'orders:order_delete' order.pk %}" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
+          <button type="submit" form="delete-draft-form" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-semibold hover:bg-red-100 transition-all">Delete draft</button>
+          <form id="delete-draft-form" method="post" action="{% url 'orders:order_delete' order.pk %}" data-confirm-title="Delete draft?" data-confirm-body="The draft is abandoned as a tombstone. Its items and audit events stay on record." data-confirm-button="Delete draft" data-confirm-icon="warning" data-confirm-color="#dc2626" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
             {% csrf_token %}
           </form>
         {% elif order.status == "DRAFT" and order.kots.exists and not order.is_return %}
           <button onclick="document.getElementById('cancel-dialog').classList.toggle('hidden')" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-semibold hover:bg-red-100 transition-all">Cancel order</button>
         {% elif order.status == "DRAFT" and not order.is_return %}
-          <button onclick="Swal.fire({title:'Delete Draft?',text:'This deletes the draft entirely, including its items and audit trail.',icon:'warning',showCancelButton:true,confirmButtonColor:'#dc2626',cancelButtonColor:'#6b7280',confirmButtonText:'Delete Draft'}).then((r)=>{if(r.isConfirmed)document.getElementById('delete-draft-form').submit()})" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-semibold hover:bg-red-100 transition-all">Delete draft</button>
-          <form id="delete-draft-form" method="post" action="{% url 'orders:order_delete' order.pk %}" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
+          <button type="submit" form="delete-draft-form" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-semibold hover:bg-red-100 transition-all">Delete draft</button>
+          <form id="delete-draft-form" method="post" action="{% url 'orders:order_delete' order.pk %}" data-confirm-title="Delete draft?" data-confirm-body="The draft is abandoned as a tombstone. Its items and audit events stay on record." data-confirm-button="Delete draft" data-confirm-icon="warning" data-confirm-color="#dc2626" class="hidden" hx-indicator="button[type='submit']" hx-disabled-elt="button[type='submit']">
             {% csrf_token %}
           </form>
         {% endif %}

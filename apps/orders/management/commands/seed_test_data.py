@@ -4,6 +4,8 @@ Creates configuration, staff logins, supplier stock, and a week of closed
 shifts with settled orders, then leaves today's shift open with live draft
 orders on the POS.
 
+Development only: the command refuses to run unless DEBUG is enabled.
+
 Usage:
     make manage ARGS='seed_test_data'
     make manage ARGS='seed_test_data --days 14 --orders-per-day 8'
@@ -14,6 +16,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -60,6 +63,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from apps.orders.models import Order
         from apps.staff.models import POSOpeningEntry
+
+        if not settings.DEBUG:
+            raise CommandError("seed_test_data is a development tool. It only runs with DEBUG enabled.")
 
         if Order.objects.exists() and not options["force"]:
             raise CommandError("Order data already exists. Use --force to append test data on top of it.")
@@ -281,7 +287,8 @@ class Command(BaseCommand):
                 },
                 {"mode_of_payment": cash_mode.pk, "amount": grand - electronic},
             ]
-        services.settle_order(order, rows, cashier=cashier, opening_entry=shift)
+        tickets = services.settle_order(order, rows, cashier=cashier, opening_entry=shift)
+        services.dispatch_tickets(tickets)
 
     def _backdate_order(self, order, day, rng, *, settled=True):
         from apps.orders.models import Order

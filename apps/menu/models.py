@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models import Q
 
 from apps.inventory.models import Item
+from apps.utils.departments import department_rule_breach
 from apps.utils.models import BaseModel
 
 
@@ -55,16 +56,9 @@ class MenuItem(BaseModel):
                 raise ValidationError({"item": "Only sellable items can be added to a menu."})
             if self.item.disabled:
                 raise ValidationError({"item": "Disabled items cannot be added to a menu."})
-            if self.item.department == "DRINKS":
-                if not (self.item.is_stock_item and self.item.is_sales_item and self.item.is_purchase_item):
-                    raise ValidationError(
-                        {"item": "Drinks items must be stock-tracked, sellable, and purchasable to be on a menu."}
-                    )
-            elif self.item.department == "FOOD" and self.item.is_sales_item:
-                if self.item.is_stock_item or self.item.is_purchase_item:
-                    raise ValidationError(
-                        {"item": "Sellable food items are virtual — they must not be stock-tracked or purchasable."}
-                    )
+            breach = department_rule_breach(self.item)
+            if breach:
+                raise ValidationError({"item": breach})
         if not self.rate and self.item and self.item.last_purchase_rate:
             self.rate = self.item.last_purchase_rate
 
@@ -103,7 +97,9 @@ class ItemAddOn(BaseModel):
             if add_on.is_stock_item or add_on.is_purchase_item:
                 raise ValidationError(
                     {
-                        "add_on_item": "Sellable food add-ons are virtual — they must not be stock-tracked or purchasable."
+                        "add_on_item": (
+                            "Sellable food add-ons are virtual — they must not be stock-tracked or purchasable."
+                        )
                     }
                 )
         if not MenuItem.objects.filter(item=add_on, disabled=False).exists():

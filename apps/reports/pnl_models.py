@@ -24,6 +24,9 @@ def _pct():
 class DailyPnL(BaseModel):
     """One restaurant business day's profit and loss snapshot."""
 
+    # Service-only submit flag — set and cleared around one status transition.
+    _allow_submit = False
+
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
     CANCELLED = "CANCELLED"

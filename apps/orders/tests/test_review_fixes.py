@@ -21,6 +21,7 @@ from apps.orders.services import (
     cancel_sent_order,
     create_tickets,
     settle_order,
+    update_order_item,
     update_order_line_quantity,
 )
 from apps.payments.models import ModeOfPayment
@@ -235,3 +236,28 @@ class DefaultPaymentModeTest(TestCase):
         cash.is_default = False
         with self.assertRaises(ValidationError):
             cash.save()
+
+
+class AuditMetadataItemTest(ReviewFixBase):
+    """ITEM_QUANTITY_CHANGED records the catalog item, never the order-line pk."""
+
+    def test_quantity_change_audits_item_id(self):
+        order = self._draft_order_with_item()
+        line_pk = order.items.get().pk
+        item_id = order.items.get().item_id
+
+        update_order_item(order, line_pk, qty=Decimal("3"), actor=self.user)
+
+        audit = order.audit_events.get(event_type="ITEM_QUANTITY_CHANGED")
+        self.assertEqual(audit.metadata["item_id"], item_id)
+
+
+class TicketRoutingTest(ReviewFixBase):
+    def test_unknown_department_raises_instead_of_defaulting_to_the_bar(self):
+        from apps.orders.models import TICKET_BAR, TICKET_KITCHEN
+        from apps.orders.services import _ticket_type_for_department
+
+        self.assertEqual(_ticket_type_for_department("FOOD"), TICKET_KITCHEN)
+        self.assertEqual(_ticket_type_for_department("DRINKS"), TICKET_BAR)
+        with self.assertRaisesMessage(ValidationError, "Cannot route a ticket"):
+            _ticket_type_for_department(None)

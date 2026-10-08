@@ -2,7 +2,7 @@
 
 ## Startup and Components
 
-`assets/javascript/alpine.js` exposes Alpine globally and starts it on `DOMContentLoaded`. `assets/javascript/order-details-drawer.js` registers `orderDetailsDrawer` and `posModalDialog` during `alpine:init`.
+`assets/javascript/alpine.js` exposes Alpine globally and starts it on `DOMContentLoaded`. During `alpine:init`, `order-details-drawer.js` registers `orderDetailsDrawer`, `pos-modal.js` registers the shared `posModalDialog` used by the payment, add-on, variant, and cash-out dialogs, and `money.js` registers the `$money()` formatter that replaces every inline `toLocaleString('en-NG')` copy. Shared focus-trap helpers live in `focus.js`.
 
 ## POS Local State
 

@@ -12,15 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 env.read_env(os.path.join(BASE_DIR, ".env"))
 
-SECRET_KEY = env("SECRET_KEY", default="django-insecure-HjfWKVIxpdgt4NHh8q56GGVTdjDvKeYV32hlsbl1")
+SECRET_KEY = env("SECRET_KEY")  # Required, no fallback. See README "Initial setup" for generating one.
 
-DEBUG = env.bool("DEBUG", default=True)
+DEBUG = env.bool("DEBUG", default=False)
 ENABLE_DEBUG_TOOLBAR = env.bool("ENABLE_DEBUG_TOOLBAR", default=False) and "test" not in sys.argv
 
-# Dev-only: superusers skip Django-admin locks while DEBUG is on.
-SPICY_DEV_ADMIN_BYPASS = DEBUG
+# Opt-in dev convenience: superusers skip Django-admin document locks.
+SPICY_DEV_ADMIN_BYPASS = env.bool("SPICY_DEV_ADMIN_BYPASS", default=False)
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
 
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -171,7 +174,7 @@ ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
-ACCOUNT_UNIQUE_EMAIL = False
+ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False
 ACCOUNT_LOGIN_BY_CODE_ENABLED = False
 ACCOUNT_SIGNUP_FORM_HONEYPOT_FIELD = "phone_number_x"
@@ -234,7 +237,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
 SERVER_EMAIL = env("SERVER_EMAIL", default="noreply@localhost:8000")
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="sanusio293@gmail.com")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default=SERVER_EMAIL)
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 
@@ -251,12 +254,17 @@ PROJECT_METADATA = {
         "access the system."
     ),
     "IMAGE": "images/brand/og-image.png",
-    "KEYWORDS": "SaaS, django",
+    "KEYWORDS": "Spicy, POS, restaurant management",
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = env.bool("USE_HTTPS_IN_ABSOLUTE_URLS", default=False)
 
-ADMINS = ["sanusio293@gmail.com"]
+# "Name:email" pairs — Django expects (name, email) tuples.
+ADMINS = [
+    (entry.split(":", 1)[0].strip(), entry.split(":", 1)[1].strip())
+    for entry in env.list("DJANGO_ADMINS", default=[])
+    if ":" in entry
+]
 
 
 LOGGING = {
@@ -280,10 +288,6 @@ LOGGING = {
         "apps": {
             "handlers": ["console"],
             "level": env("SPICY_LOG_LEVEL", default="INFO"),
-        },
-        "pegasus": {
-            "handlers": ["console"],
-            "level": env("PEGASUS_LOG_LEVEL", default="DEBUG"),
         },
     },
 }

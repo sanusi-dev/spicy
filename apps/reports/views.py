@@ -11,6 +11,7 @@ from apps.users.decorators import manager_required
 from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
 
+from . import report_filters
 from .forms import (
     DailyPnLAdHocFormSet,
     DailyPnLForm,
@@ -59,8 +60,8 @@ def daily_pnl_list(request: HttpRequest) -> HttpResponse:
     status = request.GET.get("status")
     if status:
         qs = qs.filter(status=status)
-    date_from = request.GET.get("from")
-    date_to = request.GET.get("to")
+    date_from = report_filters.parse_date(request.GET.get("from"))
+    date_to = report_filters.parse_date(request.GET.get("to"))
     if date_from:
         qs = qs.filter(business_date__gte=date_from)
     if date_to:
@@ -199,12 +200,17 @@ def daily_pnl_preview(request: HttpRequest, pk: int) -> HttpResponse:
         return render(
             request,
             "backoffice/reports/_statement.html",
-            {"preview": preview, "pnl": pnl, "food_usage_counted": preview.food_usage_counted},
+            {
+                "preview": preview,
+                "pnl": pnl,
+                "rows": preview.lines,
+                "food_usage_counted": preview.food_usage_counted,
+            },
         )
     return render(
         request,
-        "backoffice/reports/daily_pnl_form.html",
-        _form_context(pnl, form, materials, adhoc),
+        "backoffice/reports/_statement.html",
+        {"preview_error": "Check the form and try again.", "food_usage_counted": pnl.food_usage_counted},
     )
 
 

@@ -9,13 +9,9 @@ from apps.users.decorators import manager_required
 from . import accounting_reports, register_reports, report_filters, sales_breakdown_reports, sales_reports
 
 
-def _range(request, default_from=None, default_to=None):
-    return report_filters.date_range(request, default_from=default_from, default_to=default_to)
-
-
 def _month_range(request):
     default_from, default_to = report_filters.month_defaults()
-    return _range(request, default_from, default_to)
+    return report_filters.date_range(request, default_from=default_from, default_to=default_to)
 
 
 def _page(request, template, title, description, date_from, date_to, **extra):
@@ -35,7 +31,7 @@ def _page(request, template, title, description, date_from, date_to, **extra):
 @manager_required
 def sales_today(request: HttpRequest) -> HttpResponse:
     today = timezone.localdate()
-    date_from, date_to = _range(request, today, today)
+    date_from, date_to = report_filters.date_range(request, default_from=today, default_to=today)
     rows, totals = sales_reports.daywise(date_from, date_to)
     return _page(
         request,

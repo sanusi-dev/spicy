@@ -71,9 +71,15 @@ class POSViewTestBase(OrderAccountingMixin, TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def _open_shift(self):
+    def _open_shift(self, *, with_bank=False):
         entry = POSOpeningEntry.objects.create(cashier=self.user)
         OpeningPayment.objects.create(opening_entry=entry, mode_of_payment=self.cash, opening_amount=Decimal("50000"))
+        if with_bank:
+            bank, _ = ModeOfPayment.objects.get_or_create(name="Bank", defaults={"type": "BANK"})
+            PaymentGLMapping.objects.get_or_create(
+                mode_of_payment=bank, defaults={"default_account": self.accounts["bank"]}
+            )
+            OpeningPayment.objects.create(opening_entry=entry, mode_of_payment=bank, opening_amount=Decimal("0"))
         entry.submit()
         return entry
 
@@ -775,7 +781,7 @@ class POSSyncTest(POSViewTestBase):
 class POSSettleTest(POSViewTestBase):
     def setUp(self):
         super().setUp()
-        self._open_shift()
+        self._open_shift(with_bank=True)
         self.client.post(reverse("pos:pos_order_new"), {"order_type": "DINE_IN", "guest_count": "1"})
         self.order = Order.objects.first()
         self.client.post(
@@ -783,14 +789,11 @@ class POSSettleTest(POSViewTestBase):
         )
 
     def _add_bank_mode(self):
+        # Declared with the opening balance by _open_shift(with_bank=True); declared-at-open
+        # rows cannot change after the shift opens.
         bank, _ = ModeOfPayment.objects.get_or_create(name="Bank", defaults={"type": "BANK"})
         PaymentGLMapping.objects.get_or_create(
             mode_of_payment=bank, defaults={"default_account": self.accounts["bank"]}
-        )
-        OpeningPayment.objects.create(
-            opening_entry=self.order.opening_entry,
-            mode_of_payment=bank,
-            opening_amount=Decimal("0"),
         )
         return bank
 

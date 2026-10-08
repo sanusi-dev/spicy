@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
+from apps.utils.departments import department_rule_breach
 from apps.utils.models import BaseModel
 from apps.utils.rounding import TWO_PLACES, money
 
@@ -191,26 +192,17 @@ class Item(BaseModel):
         if self.variant_of_id and not self.variant_of.has_variants:
             raise ValidationError("Parent item must have has_variants=True")
         if not self.has_variants and not self.variant_of_id:
-            if self.department == "DRINKS":
-                if not (self.is_stock_item and self.is_sales_item and self.is_purchase_item):
-                    raise ValidationError(
-                        {"is_stock_item": "Drinks items must be stock-tracked, sellable, and purchasable."}
-                    )
-            elif self.department == "FOOD":
-                if self.is_sales_item:
-                    if self.is_stock_item or self.is_purchase_item:
-                        raise ValidationError(
-                            {
-                                "is_stock_item": (
-                                    "Sellable food items are virtual — they must not be stock-tracked or purchasable."
-                                )
-                            }
-                        )
-                else:
-                    if not (self.is_stock_item and self.is_purchase_item):
-                        raise ValidationError(
-                            {"is_stock_item": "Non-sellable food items must be stock-tracked and purchasable."}
-                        )
+            breach = department_rule_breach(self)
+            if breach:
+                raise ValidationError({"is_stock_item": breach})
+            elif (
+                self.department == "FOOD"
+                and not self.is_sales_item
+                and not (self.is_stock_item and self.is_purchase_item)
+            ):
+                raise ValidationError(
+                    {"is_stock_item": "Non-sellable food items must be stock-tracked and purchasable."}
+                )
         if self.pk and not self.is_sales_item:
             from apps.menu.models import MenuItem
 
@@ -280,6 +272,24 @@ class ItemUOMConversion(BaseModel):
             raise ValidationError("Sellable food items cannot have UOM conversions.")
         if self.uom_id and item.stock_uom_id and self.uom_id == item.stock_uom_id:
             raise ValidationError({"uom": "Cannot convert the stock unit to itself."})
+
+    def _priced_postings_exist(self):
+        """True when a stock movement for this item is posted at or after this row was created."""
+        return StockLedgerEntry.objects.filter(item_id=self.item_id, posting_datetime__gte=self.created_at).exists()
+
+    def save(self, *args, **kwargs):
+        if self.pk and self._priced_postings_exist():
+            previous = type(self).objects.only("uom_id", "conversion_factor").get(pk=self.pk)
+            if (self.uom_id, self.conversion_factor) != (previous.uom_id, previous.conversion_factor):
+                raise ValidationError(
+                    "This conversion already priced past stock documents. Keep it and add a new row instead."
+                )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.pk and self._priced_postings_exist():
+            raise ValidationError("This conversion already priced past stock documents and cannot be deleted.")
+        return super().delete(*args, **kwargs)
 
 
 class Bin(BaseModel):
@@ -834,7 +844,9 @@ class PurchaseReceipt(BaseModel):
         blank=True,
         related_name="purchase_receipts",
         verbose_name="Supplier",
-        help_text="Link this receipt to a supplier record, if you keep one. The supplier name is still saved either way.",
+        help_text=(
+            "Link this receipt to a supplier record, if you keep one. The supplier name is still saved either way."
+        ),
     )
     supplier_delivery_note = models.CharField(max_length=100, blank=True)
     posting_date = models.DateField(default=timezone.now)

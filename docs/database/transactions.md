@@ -15,21 +15,21 @@ These order functions are atomic: draft creation, metadata update, cart item upd
 | Bin | reservations, WAC, actual stock and valuation | order/inventory services |
 | KOT | independent print status dispatch/retry | `dispatch_tickets`, POS ticket view |
 | Closing entry/opening entry | one close and authoritative shift cutoff | `submit_closing_entry` |
-| SLE and Bin | deterministic voucher reversal and ledger tail updates | inventory `_reverse_voucher` |
+| SLE and Bin | deterministic voucher reversal and ledger tail updates | inventory `_reverse_sles_at_current_wac` / `_cancellation_wac_gl_rows` |
 
 ## Rollback Boundaries
 
 - Settlement rolls back payment rows, order status, stock deduction, and reservation conversion together.
 - Add-on parent/add-on lines are one operation.
 - Inventory document posting rolls back all SLE and Bin changes if a later line fails.
-- Settlement commits before `print_receipt()`. A failed print does not roll back the settled, printed order.
+- Settlement commits before printing. `settle_order()` returns its ticket snapshots; `pos_order_settle()` dispatches them after the commit. `print_receipt()` also runs after the commit. A failed print does not roll back the settled, printed order.
 - Return submission rolls back stock restoration and refund rows together if any line fails.
 - KOT creation commits before printing. One ticket print transaction is independent of another.
 - POS close GET is read-only. POS close POST can commit a draft closing entry before invalid form rendering.
 
 ## Bulk Operations
 
-`OpeningPayment`, `ClosingPayment`, and KOT items use `bulk_create`. Inventory services use `bulk_update` for item last-purchase-rate changes. Bulk methods bypass model `save()` and `clean()`. Callers provide the needed validation before bulk writes.
+`OpeningPayment`, `ClosingPayment`, and KOT items use `bulk_create`. Inventory services use `bulk_update` for item last-purchase-rate changes. Bulk methods bypass model `save()` and `clean()`. Callers provide the needed validation before bulk writes. For shift documents this is the only sanctioned write-around: the closing Z-report backfill and report fixtures stamp frozen sales fields through `queryset.update()` on rows created as drafts. All ordinary ORM writes on those documents go through the guards.
 
 ## Concurrency Protections
 

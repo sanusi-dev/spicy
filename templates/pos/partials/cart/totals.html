@@ -52,11 +52,10 @@
               Delete Order
             </button>
             {% if has_items %}
-              <button type="button" x-ref="clearBtn" @click="open = false" onclick="Swal.fire({title:'Clear order?',text:'Remove all items from this order.',icon:'warning',showCancelButton:true,confirmButtonColor:'#dc2626',cancelButtonColor:'#6b7280',confirmButtonText:'Clear Order'}).then((r)=>{if(r.isConfirmed){htmx.trigger('#clear-order-btn','click')}})" class="w-full text-left px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 inline-flex items-center gap-2.5 transition-colors disabled:cursor-wait disabled:opacity-50">
+              <button id="clear-order-btn" type="button" hx-post="{% url 'pos:pos_order_clear' order.pk %}" hx-target="#cart-panel" hx-swap="outerHTML" data-confirm-title="Clear order?" data-confirm-message="Remove all items from this order." data-confirm-button="Clear Order" data-confirm-icon="warning" data-confirm-color="#dc2626" class="w-full text-left px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 inline-flex items-center gap-2.5 transition-colors disabled:cursor-wait disabled:opacity-50" hx-on::before-request="$el.disabled = true" hx-on::after-request="$el.disabled = false" @click="open = false">
                 {% hgi_stroke name="delete-02" size="17" color="currentColor" stroke_width="2" %}
                 Clear
               </button>
-              <button id="clear-order-btn" type="button" class="hidden" hx-post="{% url 'pos:pos_order_clear' order.pk %}" hx-target="#cart-panel" hx-swap="outerHTML" hx-on::before-request="$refs.clearBtn.disabled = true" hx-on::after-request="$refs.clearBtn.disabled = false"></button>
             {% endif %}
           {% endif %}
         </div>
@@ -83,10 +82,7 @@
               <div class="flex gap-3 pt-2">
                 <button type="button" @click="cancelOpen = false" class="flex-1 rounded-xl border border-slate-300 bg-transparent py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-teal-400 hover:text-teal-800">Keep Order</button>
                 <button type="submit" :disabled="processing" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">
-                  <svg class="hidden h-4 w-4 animate-spin" x-show="processing" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                  {% include "pos/partials/components/spinner.html" with spinner_alpine="processing" %}
                   <span class="flex size-4 items-center justify-center" x-show="!processing">{% hgi_stroke name="cancel-circle" size="17" color="currentColor" stroke_width="2" %}</span>
                   <span x-show="!processing">Cancel Order</span>
                 </button>
@@ -100,7 +96,7 @@
             <div class="flex items-start justify-between gap-4 mb-5">
               <div>
                 <h2 class="text-xl font-extrabold tracking-tight text-slate-900">Delete order?</h2>
-                <p class="mt-1 text-sm text-slate-500">This removes the draft entirely, including its items. Nothing was sent to the kitchen or bar yet.</p>
+                <p class="mt-1 text-sm text-slate-500">The draft becomes a tombstone on the record. Nothing was sent to the kitchen or bar yet.</p>
               </div>
               <button type="button" @click="deleteOpen = false" class="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">{% hgi_stroke name="cancel-circle" size="20" color="currentColor" stroke_width="2" %}</button>
             </div>
@@ -109,10 +105,7 @@
               <div class="flex gap-3 pt-2">
                 <button type="button" @click="deleteOpen = false" class="flex-1 rounded-xl border border-slate-300 bg-transparent py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-teal-400 hover:text-teal-800">Keep Order</button>
                 <button type="submit" :disabled="processing" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-red-700 disabled:cursor-wait disabled:opacity-60">
-                  <svg class="hidden h-4 w-4 animate-spin" x-show="processing" x-cloak fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                  {% include "pos/partials/components/spinner.html" with spinner_alpine="processing" %}
                   <span class="flex size-4 items-center justify-center" x-show="!processing">{% hgi_stroke name="delete-02" size="17" color="currentColor" stroke_width="2" %}</span>
                   <span x-show="!processing">Delete Order</span>
                 </button>
@@ -123,10 +116,7 @@
       </div>
       {% if not order_sent and has_items %}
         <button type="button" hx-post="{% url 'pos:pos_order_sync' order.pk %}" hx-target="#cart-panel" hx-swap="outerHTML" hx-on::before-request="$el.disabled = true" hx-on::after-request="$el.disabled = false" class="inline-flex min-h-11 flex-none items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:opacity-60">
-          <svg class="hidden h-4 w-4 animate-spin [.htmx-request_&]:block" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
+          {% include "pos/partials/components/spinner.html" with spinner_extras="[.htmx-request_&]:block" %}
           <span class="flex size-4 items-center justify-center [.htmx-request_&]:hidden">{% hgi_stroke name="kitchen-utensils" size="17" color="currentColor" stroke_width="2" %}</span>
           <span>Send</span>
         </button>

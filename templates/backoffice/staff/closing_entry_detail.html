@@ -69,6 +69,10 @@
         <dt class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Refunded Total</dt>
         <dd class="text-base font-mono font-bold text-gray-900">{{ closing.refunded_total }}</dd>
       </div>
+      <div>
+        <dt class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Cancelled after send</dt>
+        <dd class="text-base font-mono font-bold {% if cancelled_count %}text-rose-600{% else %}text-gray-900{% endif %}">{{ cancelled_count }}</dd>
+      </div>
     {% endif %}
     {% if closing.status == "SUBMITTED" and closing.total_short_excess is not None %}
       <div>

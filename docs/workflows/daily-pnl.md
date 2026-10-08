@@ -78,6 +78,8 @@ The Daily P&L is the document that answers those questions for **one day**, in a
 
 The GL already moved when orders settled and when the shift closed. Daily P&L is a **second view** of the same day, shaped for the owner. It has extras the GL does not have (meter readings, cooking-gas qty, a day's slice of monthly rent).
 
+**Refresh preview** posts the form and rerenders only the statement: fresh lines when the form is valid, the statement's error box when it is not. The form page never lands inside the preview target, so HTMX cannot end up with nested forms.
+
 ---
 
 ## 4. Who uses it, and when
@@ -110,6 +112,7 @@ Direct expenses
   Materials (gas, etc.)
   Recurring "direct daily" templates
   Ad-hoc directs
+  Unallocated direct costs            ← Total only; directs with no FOOD/DRINKS tag
 Gross profit
 Prime cost                          ← memo: food actual + drink COGS + labor
 Employee costs
@@ -148,6 +151,7 @@ P&L settings: electricity ₦50/unit, daily depreciation ₦50. Manager enters m
 | Food cost variance *(memo)* | −1,750 | — | −1,750 | 250 − 2,000 |
 | Electricity | — | — | 100 | 2 × ₦50 |
 | Cooking gas | — | — | 200 | 2 × ₦100 |
+| Unallocated direct costs | — | — | 300 | Directs with no department tag: 100 + 200 |
 | **Gross profit** | 13,000 | 6,000 | 18,700 | See formulas below |
 | Prime cost *(memo)* | 2,000 | 4,000 | 14,000 | 6,000 COGS + 8,000 labor |
 | Employee costs | — | — | 8,000 | Template or override |
@@ -160,11 +164,11 @@ Formulas used:
 ```text
 GP food    = food sales − actual food − food-tagged directs   → 15,000 − 2,000 − 0
 GP drinks  = drinks sales − drink COGS − drinks directs → 10,000 − 4,000 − 0
-GP total   = net sales − (actual food + drink COGS) − all directs → 25,000 − 6,000 − 300
+GP total   = GP food + GP drinks − unallocated directs + round-off → 19,000 − 300 + 0
 Net profit = GP total − all indirects                   → 18,700 − (8,000 + 50)
 ```
 
-Electricity and materials land in **Total** only, unless a recurring/ad-hoc row is tagged FOOD or DRINKS. That is why **GP food + GP drinks (19,000) is not equal to GP total (18,700)** in this example. ₦300 of unallocated directs sits only on the total column.
+Electricity and materials land in **Total** only, unless a recurring/ad-hoc row is tagged FOOD or DRINKS. They surface as one explicit "Unallocated direct costs" line, so the Total column arithmetic is checkable on the page: **GP food + GP drinks − unallocated directs + round-off = GP total** (13,000 + 6,000 − 300 + 0 = 18,700). Prime cost carries the employee split in its department columns the same way.
 
 Actual usage sits inside food gross profit (₦2,000 used vs ₦15,000 sold). Theoretical (₦250) and variance (−₦1,750) are memos explaining the gap between recipe expectation and counted usage.
 
@@ -182,8 +186,8 @@ These are queried when `compute_daily_pnl()` runs. A draft's preview will change
 |---|---|---|
 | Food / drinks sales | Submitted `OrderItem.amount` summed by `department`, falling back to the item's department when a line's snapshot is NULL (matching the GL income legs) | Orders whose settlement-stamped `posting_date` + `posting_time` fall in the business-day window |
 | Round-off | Sum of `Order.rounding_adjustment` | Same orders |
-| Drink COGS | Drink `StockLedgerEntry` rows for those orders | Sales (`POS Order`, qty < 0) add the SLE's booked value (`abs(stock_value_change)`). Restock returns (`POS Return`, qty > 0) subtract it. Non-restockable return lines subtract the sale's cost and re-add it as wastage (net zero) |
-| Food COGS (actual) | Kitchen `CONSUMPTION` + `WASTE_DAMAGE` reconciliation SLEs via `inventory.services.compute_food_usage()` | Rec `posting_date` **equals** the P&L `business_date` (calendar date. The hour window does not apply). `ADJUSTMENT` excluded |
+| Drink COGS | Drink `StockLedgerEntry` rows for those orders, attributed by the sale-time department: `voucher_detail_no` points at the `OrderItem`, and the line's `department` snapshot decides DRINKS. The item's *current* department never moves historical cost between columns. Sales (`POS Order`, qty < 0) add the SLE's booked value (`abs(stock_value_change)`). Restock returns (`POS Return`, qty > 0) subtract it. Non-restockable return lines subtract the sale's cost and re-add it as wastage (net zero). Ledger rows without an order line (or whose line is not DRINKS) stay out of the drink column |
+| Food COGS (actual) | Kitchen `CONSUMPTION` + `WASTE_DAMAGE` reconciliation SLEs via `apps.reports.food_usage.compute_food_usage()` | Rec `posting_date` **equals** the P&L `business_date` (calendar date. The hour window does not apply). `ADJUSTMENT` excluded |
 | Theoretical food cost (memo) | Active recipe × submitted FOOD `OrderItem` qty in the window (returns net, with NULL department snapshots falling back to the item's department) | Same rate per ingredient as actual (actual-SLE WAC, else bin WAC, else last rate) |
 | Food cost variance (memo) | Theoretical − actual | Quantity story in qty and naira |
 | Cash variance | Submitted `POSClosingEntry.total_short_excess`, sign flipped | Close `period_end_date` in the business-day window. Skipped if the settings toggle is off |
@@ -489,7 +493,7 @@ The statement partial accepts either live `LineSpec` dataclasses (preview) or sa
 
 1. Load settings. Build `[start, end)` from `business_date` + start hour.
 2. Collect submitted orders in that window (`orders_in_window` then `sales_by_department`, `round_off`).
-3. Drink COGS + item rows (`drink_cogs`). Food usage via `inventory.services.compute_food_usage()` — actual, theoretical, variance, unmapped, and a `counted` flag. The flag is True when at least one SUBMITTED `CONSUMPTION`/`WASTE_DAMAGE` reconciliation exists for the Kitchen on the business date.
+3. Drink COGS + item rows (`drink_cogs`). Food usage via `apps.reports.food_usage.compute_food_usage()` — actual, theoretical, variance, unmapped, and a `counted` flag. The flag is True when at least one SUBMITTED `CONSUMPTION`/`WASTE_DAMAGE` reconciliation exists for the Kitchen on the business date.
 4. Append sales / round-off / net sales / COGS (food actual + drinks) / theoretical + variance memo lines. `food_usage_counted = usage.counted or food sales == 0` — a food-sales day with no consumption count is flagged.
 5. Directs: electricity if readings exist, each material with qty > 0, `DIRECT_DAILY` templates, and ad-hoc DIRECT rows.
 6. Gross profit from the formulas in §6.
@@ -510,7 +514,7 @@ The statement partial accepts either live `LineSpec` dataclasses (preview) or sa
 - Return orders → `voucher_type="POS Return"`, qty > 0, drinks → kind `RETURN`, amount negative.
 - Return orders with `not_restockable` drink lines → kind `RETURN` (amount negative) plus kind `WASTAGE` (amount positive) at `orders.services.settle_time_rate()`. That helper is the weighted settle-time WAC, shared with the GL refund legs. The pair reclassifies the sale's cost and nets to zero.
 
-### Food usage (`inventory.services.compute_food_usage`)
+### Food usage (`apps.reports.food_usage.compute_food_usage`)
 
 The single source for the Food usage page and the P&L food numbers — reports call it, never reimplement it. Theoretical explodes active recipes over submitted FOOD order lines in the window (returns net, unmapped dishes listed separately). Actual reads submitted Kitchen `CONSUMPTION` + `WASTE_DAMAGE` SLEs on `posting_date == business_date` (`ADJUSTMENT` excluded). One rate per ingredient values both sides: actual-SLE weighted average, else Kitchen bin WAC, else `last_purchase_rate`, else 0 (flagged on the report).
 

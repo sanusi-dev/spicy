@@ -1,19 +1,26 @@
 """Order workflows — drafts, lines, settlement, returns, tickets, and drink reservations."""
 
+from __future__ import annotations
+
+from collections.abc import Iterator
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet, Sum
 from django.utils import timezone
 
-from apps.inventory.models import Bin, Item, StockLedgerEntry
+from apps.inventory.models import Bin, Item, StockLedgerEntry, Warehouse
 from apps.menu.models import MenuItem
 from apps.payments.models import ModeOfPayment, PaymentGLMapping
+from apps.utils.departments import department_label
 from apps.utils.rounding import money
+
+if TYPE_CHECKING:
+    from apps.settings.models import ProductionUnit
 
 from . import printing
 from .models import (
@@ -42,8 +49,9 @@ from .models import (
 
 
 @transaction.atomic
-def create_draft_order(shift, user, *, order_type=DINE_IN, guest_count=1):
+def create_draft_order(shift, user, *, order_type=DINE_IN, guest_count=1) -> Order:
     """Create a draft order on the shift, enforcing the open-draft cap."""
+
     from apps.settings.models import Restaurant
     from apps.staff.models import POSOpeningEntry
 
@@ -75,7 +83,7 @@ def create_draft_order(shift, user, *, order_type=DINE_IN, guest_count=1):
 
 
 @transaction.atomic
-def update_order_meta(order, *, order_type=None, guest_delta=None, guest_count=None, actor=None):
+def update_order_meta(order, *, order_type=None, guest_delta=None, guest_count=None, actor=None) -> int:
     """Apply order-type or guest-count edits to a draft order; return the effective guest count."""
     if order_type is None and guest_delta is None and guest_count is None:
         return order.guest_count
@@ -105,7 +113,7 @@ def update_order_meta(order, *, order_type=None, guest_delta=None, guest_count=N
 
 
 @transaction.atomic
-def update_order_item(order, order_item_pk, *, action="update", qty=None, actor=None):
+def update_order_item(order, order_item_pk, *, action="update", qty=None, actor=None) -> None:
     """Apply a POS quantity action to a draft line: remove, increment, decrement, or set qty."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     locked._ensure_editable()
@@ -127,7 +135,7 @@ def update_order_item(order, order_item_pk, *, action="update", qty=None, actor=
         locked.audit(
             "ITEM_QUANTITY_CHANGED",
             actor=actor,
-            metadata={"item_id": order_item_pk, "quantity": str(new_qty)},
+            metadata={"item_id": oi.item_id, "quantity": str(new_qty)},
         )
     else:
         try:
@@ -143,14 +151,14 @@ def update_order_item(order, order_item_pk, *, action="update", qty=None, actor=
                 locked.audit(
                     "ITEM_QUANTITY_CHANGED",
                     actor=actor,
-                    metadata={"item_id": order_item_pk, "quantity": str(qty)},
+                    metadata={"item_id": oi.item_id, "quantity": str(qty)},
                 )
     locked.recalculate_totals()
     order.refresh_from_db()
 
 
 @transaction.atomic
-def settle_order(order, payments_data, cashier=None, opening_entry=None):
+def settle_order(order, payments_data, cashier=None, opening_entry=None) -> list[KOT]:
     """Process a normal POS payment and submit the order atomically."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
@@ -164,6 +172,8 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     locked._validate_current_lines()
     from apps.staff.models import POSOpeningEntry
 
+    if locked.opening_entry_id is None:
+        raise ValidationError("An active shift is required before settlement.")
     active_shift = (
         POSOpeningEntry.objects.select_for_update()
         .filter(pk=locked.opening_entry_id, status=POSOpeningEntry.SUBMITTED, closing_entry__isnull=True)
@@ -177,6 +187,7 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
         locked.cashier = cashier
     locked.recalculate_totals()
     locked.grand_total = locked.rounded_total
+    created = []
     reservations_initialized = _reservations_initialized(locked)
     _snapshot_stock_warehouse(locked)
     _locked_drink_stock(locked, reservations_initialized=reservations_initialized)
@@ -194,12 +205,11 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     if not locked.kots.exists():
         planned_tickets, missing_departments = _plan_tickets(locked)
         if missing_departments:
-            labels = ", ".join("Food" if department == "FOOD" else "Drinks" for department in missing_departments)
+            labels = ", ".join(department_label(department) for department in missing_departments)
             raise ValidationError(f"Configure a production unit before sending: {labels}.")
         if planned_tickets:
             created = _build_ticket_snapshots(locked, planned_tickets, created_by=cashier)
             locked.audit("KOTS_CREATED", actor=cashier, metadata={"count": len(created)})
-            dispatch_tickets(created)
     locked._settling = True
     try:
         for row in payment_rows:
@@ -235,10 +245,11 @@ def settle_order(order, payments_data, cashier=None, opening_entry=None):
     post_order_gl(locked)
     locked.audit("SUBMITTED", actor=cashier, metadata={"paid_amount": str(total_paid)})
     order.refresh_from_db()
+    return created
 
 
 @transaction.atomic
-def cancel_sent_order(order, reason, reason_note="", cancelled_by=None):
+def cancel_sent_order(order, reason, reason_note="", cancelled_by=None) -> list[KOT]:
     """Cancel a sent draft order (KOT exists), releasing reservations and tickets."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
@@ -285,7 +296,7 @@ def cancel_sent_order(order, reason, reason_note="", cancelled_by=None):
 
 
 @transaction.atomic
-def discard_order(order, discarded_by=None):
+def discard_order(order, discarded_by=None) -> None:
     """Mark an empty, untouched draft as discarded instead of cancelling it."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
@@ -305,7 +316,7 @@ def discard_order(order, discarded_by=None):
 
 
 @transaction.atomic
-def delete_unsent_draft(order, deleted_by=None):
+def delete_unsent_draft(order, deleted_by=None) -> None:
     """Abandon an unsent draft as a tombstone: DISCARDED status with items and audit trail kept."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
@@ -326,7 +337,7 @@ def delete_unsent_draft(order, deleted_by=None):
 
 
 @contextmanager
-def _transition(order, *, flag):
+def _transition(order, *, flag) -> Iterator[None]:
     """Set a private lifecycle flag for one guarded save, removing it on exit."""
     setattr(order, flag, True)
     try:
@@ -335,14 +346,16 @@ def _transition(order, *, flag):
         delattr(order, flag)
 
 
-def _stamp_submission(order, submitted_at):
+def _stamp_submission(order, submitted_at) -> None:
     """Move an order's posting date and time to the moment it is submitted."""
     order.posting_date = timezone.localdate(submitted_at)
     order.posting_time = timezone.localtime(submitted_at).time()
 
 
 @transaction.atomic
-def add_order_line(order, item, qty=1, customer_index=1, comments="", rate=None, menu_item=None, item_name=None):
+def add_order_line(
+    order, item, qty=1, customer_index=1, comments="", rate=None, menu_item=None, item_name=None
+) -> OrderItem:
     """Add a line to a draft order, merging identical lines and reserving drink stock."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     locked._ensure_editable()
@@ -383,7 +396,7 @@ def add_order_line(order, item, qty=1, customer_index=1, comments="", rate=None,
 
 
 @transaction.atomic
-def update_order_line_quantity(order, order_item_pk, qty):
+def update_order_line_quantity(order, order_item_pk, qty) -> OrderItem | None:
     """Set a draft line quantity, reserving or releasing drink stock atomically."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     locked._ensure_editable()
@@ -417,13 +430,13 @@ def update_order_line_quantity(order, order_item_pk, qty):
 
 
 @transaction.atomic
-def remove_order_line(order, order_item_pk):
+def remove_order_line(order, order_item_pk) -> OrderItem | None:
     """Remove a line from a draft order."""
     return update_order_line_quantity(order, order_item_pk, Decimal("0"))
 
 
 @transaction.atomic
-def clear_order_lines(order):
+def clear_order_lines(order) -> None:
     """Remove every editable draft line and release its drink reservations."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     locked._ensure_editable()
@@ -434,7 +447,7 @@ def clear_order_lines(order):
 
 
 @transaction.atomic
-def make_return(order):
+def make_return(order) -> Order:
     """Create a manager-reviewed draft return with negative item quantities."""
     source = Order.objects.select_for_update().prefetch_related("items", "payments").get(pk=order.pk)
     if source.status != SUBMITTED:
@@ -494,7 +507,7 @@ def make_return(order):
 
 
 @transaction.atomic
-def submit_return(order, actor=None):
+def submit_return(order, actor=None) -> Order:
     """Submit a return draft, restoring stock and mirroring refund payments."""
     locked = Order.objects.select_for_update().prefetch_related("items").get(pk=order.pk)
     if locked.status != DRAFT:
@@ -539,7 +552,7 @@ def submit_return(order, actor=None):
 
 
 @transaction.atomic
-def create_tickets(order, created_by=None):
+def create_tickets(order, created_by=None) -> list[KOT]:
     """Create one immutable kitchen ticket and one bar ticket from the order snapshot."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT:
@@ -555,7 +568,7 @@ def create_tickets(order, created_by=None):
     planned_tickets, missing_departments = _plan_tickets(locked)
 
     if missing_departments:
-        labels = ", ".join("Food" if department == "FOOD" else "Drinks" for department in missing_departments)
+        labels = ", ".join(department_label(department) for department in missing_departments)
         raise ValidationError(f"Configure a production unit before sending: {labels}.")
     if not planned_tickets:
         raise ValidationError("No kitchen or bar ticket is required for this order.")
@@ -565,15 +578,15 @@ def create_tickets(order, created_by=None):
     return created
 
 
-def _plan_tickets(locked):
+def _plan_tickets(locked) -> tuple[list[tuple[str | None, list[OrderItem], ProductionUnit]], list[str | None]]:
     """Group an order's lines by department and resolve each department's production unit."""
     from apps.settings.models import ProductionUnit
 
-    items_by_department = {}
+    items_by_department: dict[str | None, list[OrderItem]] = {}
     for order_item in locked.items.select_related("item"):
         department = order_item.department or order_item.item.department
         items_by_department.setdefault(department, []).append(order_item)
-    production_units = {pu.department: pu for pu in ProductionUnit.objects.all()}
+    production_units: dict[str | None, ProductionUnit] = {pu.department: pu for pu in ProductionUnit.objects.all()}
     planned_tickets = []
     missing_departments = []
     for department, order_items in items_by_department.items():
@@ -587,7 +600,7 @@ def _plan_tickets(locked):
     return planned_tickets, missing_departments
 
 
-def _build_ticket_snapshots(locked, planned_tickets, *, created_by):
+def _build_ticket_snapshots(locked, planned_tickets, *, created_by) -> list[KOT]:
     """Create the immutable KOT/KOTItem snapshots for the planned tickets."""
     created = []
     for department, order_items, production_unit in planned_tickets:
@@ -622,7 +635,7 @@ def _build_ticket_snapshots(locked, planned_tickets, *, created_by):
     return created
 
 
-def dispatch_tickets(tickets):
+def dispatch_tickets(tickets) -> list[str]:
     """Print each ticket, persist its print status, and return failed ticket types."""
     print_failures = []
     for kot in tickets:
@@ -640,7 +653,7 @@ def dispatch_tickets(tickets):
     return print_failures
 
 
-def drink_quantities(order):
+def drink_quantities(order) -> dict[int, Decimal]:
     """Aggregate per-item drink quantities on a draft order ({item_id: qty})."""
     if order.is_return:
         return {}
@@ -653,7 +666,7 @@ def drink_quantities(order):
     return {row["item_id"]: row["qty"] for row in rows if row["qty"] > 0}
 
 
-def reserve_drink_stock(order, target_quantities):
+def reserve_drink_stock(order, target_quantities) -> None:
     """Synchronize this draft's aggregate drink reservation to target quantities."""
     if order.is_return:
         return
@@ -704,14 +717,14 @@ def reserve_drink_stock(order, target_quantities):
         order.stock_warehouse_id = snapshot_id
 
 
-def release_drink_reservations(order):
+def release_drink_reservations(order) -> None:
     """Release the order's drink reservations."""
     if not _reservations_initialized(order):
         return
     reserve_drink_stock(order, {})
 
 
-def drink_stock_available(menu_items, settings):
+def drink_stock_available(menu_items, settings) -> None:
     """Set POS availability (unreserved stock) on each menu item."""
     drink_item_ids = [mi.item_id for mi in menu_items if mi.item.department == "DRINKS"]
     drink_bins = (
@@ -745,7 +758,7 @@ def drink_stock_available(menu_items, settings):
             menu_item.stock_message = "Out of stock"
 
 
-def order_history_rows(filters):
+def order_history_rows(filters) -> QuerySet[Order]:
     """Build the POS history queryset from parsed filters."""
     payment_filter = filters.get("payment", "")
     status_filter = filters.get("status", "sales")
@@ -801,7 +814,7 @@ class _DraftOrder(Protocol):
     minutes_ago: int
 
 
-def open_draft_orders(shift, user, order_filter="all", order_search=""):
+def open_draft_orders(shift, user, order_filter="all", order_search="") -> list[_DraftOrder]:
     """Return the user's visible draft orders for the POS home screen, with item previews attached."""
     draft_orders_queryset = (
         Order.objects.open_drafts_for(shift, user)
@@ -839,7 +852,7 @@ def open_draft_orders(shift, user, order_filter="all", order_search=""):
     return draft_orders
 
 
-def apply_add_on_line(order, item, add_on_ids, qty, customer_index, comments=""):
+def apply_add_on_line(order, item, add_on_ids, qty, customer_index, comments="") -> None:
     """Price and merge an item's add-on lines into the order."""
     from apps.settings.models import Restaurant
 
@@ -890,7 +903,7 @@ def apply_add_on_line(order, item, add_on_ids, qty, customer_index, comments="")
         order.recalculate_totals()
 
 
-def _validate_payment_data(order, payments_data, opening_entry):
+def _validate_payment_data(order, payments_data, opening_entry) -> list[dict[str, Any]]:
     """Resolve and validate payment rows before changing the order."""
     from apps.settings.models import Restaurant
 
@@ -922,7 +935,7 @@ def _validate_payment_data(order, payments_data, opening_entry):
             mode_pk = mode_reference.pk
         else:
             try:
-                if isinstance(mode_reference, bool):
+                if isinstance(mode_reference, bool) or mode_reference is None:
                     raise ValueError
                 mode_pk = int(mode_reference)
             except TypeError, ValueError:
@@ -960,7 +973,7 @@ def _validate_payment_data(order, payments_data, opening_entry):
     return payment_rows
 
 
-def _snapshot_stock_warehouse(order):
+def _snapshot_stock_warehouse(order) -> Warehouse | None:
     """Validate or capture the configured warehouse for this transaction."""
     from apps.settings.models import Restaurant
 
@@ -971,19 +984,22 @@ def _snapshot_stock_warehouse(order):
     has_drinks = order.items.filter(
         Q(department="DRINKS") | Q(department__isnull=True, item__department="DRINKS")
     ).exists()
-    if has_drinks and warehouse is None:
-        raise ValidationError("Configure the Bar/POS warehouse before settling drinks.")
-    if has_drinks and order.stock_warehouse_id:
-        if order.stock_warehouse_id != warehouse.pk:
-            raise ValidationError("The Bar/POS warehouse changed while this order was open. Clear or cancel the order.")
-        if order.stock_warehouse.disabled:
-            raise ValidationError("The order's Bar/POS warehouse snapshot is disabled.")
-        return order.stock_warehouse
+    if has_drinks:
+        if warehouse is None:
+            raise ValidationError("Configure the Bar/POS warehouse before settling drinks.")
+        if order.stock_warehouse_id:
+            if order.stock_warehouse_id != warehouse.pk:
+                raise ValidationError(
+                    "The Bar/POS warehouse changed while this order was open. Clear or cancel the order."
+                )
+            if order.stock_warehouse.disabled:
+                raise ValidationError("The order's Bar/POS warehouse snapshot is disabled.")
+            return order.stock_warehouse
     order.stock_warehouse = warehouse if has_drinks else None
     return order.stock_warehouse
 
 
-def _locked_drink_stock(order, *, reservations_initialized):
+def _locked_drink_stock(order, *, reservations_initialized) -> tuple[list[OrderItem], dict[int, Bin]]:
     """Lock and return the order's drink stock rows for settlement.
 
     reservations_initialized: when False, the order predates reservations and draws all qty from unreserved stock.
@@ -998,7 +1014,7 @@ def _locked_drink_stock(order, *, reservations_initialized):
     if not order.stock_warehouse_id:
         raise ValidationError("This order has no stock warehouse snapshot.")
     warehouse = order.stock_warehouse
-    quantities = {}
+    quantities: dict[int, Decimal] = {}
     for order_item in drink_items:
         if not (order_item.item.is_stock_item and order_item.item.is_sales_item and order_item.item.is_purchase_item):
             raise ValidationError(f"{order_item.item_name} must be a stock-tracked, sellable, purchasable drink.")
@@ -1016,13 +1032,13 @@ def _locked_drink_stock(order, *, reservations_initialized):
     return drink_items, bins
 
 
-def _convert_drink_reservations(order, *, reservations_initialized):
+def _convert_drink_reservations(order, *, reservations_initialized) -> None:
     """Atomically convert this order's drink reservations into stock ledger issues."""
     voucher_no = str(order.pk)
     drink_items, bins = _locked_drink_stock(order, reservations_initialized=reservations_initialized)
     if not drink_items:
         return
-    quantities = {}
+    quantities: dict[int, Decimal] = {}
     for order_item in drink_items:
         quantities[order_item.item_id] = quantities.get(order_item.item_id, Decimal("0")) + order_item.qty
     owned_quantities = quantities if reservations_initialized else {}
@@ -1045,7 +1061,7 @@ def _convert_drink_reservations(order, *, reservations_initialized):
         )
 
 
-def _refund_payment_shares(source, refund_total):
+def _refund_payment_shares(source, refund_total) -> list[tuple[OrderPayment, Decimal]]:
     """Split a refund across source payment modes in proportion to net tenders."""
     from apps.settings.models import Restaurant
 
@@ -1085,7 +1101,7 @@ def _refund_payment_shares(source, refund_total):
 
 
 @transaction.atomic
-def update_return_line(order, line_pk, *, qty=None, not_restockable=None):
+def update_return_line(order, line_pk, *, qty=None, not_restockable=None) -> Order:
     """Edit a return-draft line: reduce qty, drop the line, or mark wastage."""
     locked = Order.objects.select_for_update().get(pk=order.pk)
     if locked.status != DRAFT or not locked.is_return:
@@ -1109,7 +1125,7 @@ def update_return_line(order, line_pk, *, qty=None, not_restockable=None):
     return order
 
 
-def settle_time_rate(source_order, item):
+def settle_time_rate(source_order, item) -> Decimal:
     """Weighted-average WAC at which the source order issued the item."""
     sles = StockLedgerEntry.objects.filter(
         voucher_type="POS Order",
@@ -1124,7 +1140,7 @@ def settle_time_rate(source_order, item):
     return total_value / total_qty
 
 
-def _restore_stock(order, voucher_type="POS Return"):
+def _restore_stock(order, voucher_type="POS Return") -> None:
     """Restore restockable return lines to stock; not_restockable lines post as wastage."""
     voucher_no = str(order.pk)
     stock_items = order.items.select_related("item").filter(
@@ -1151,7 +1167,7 @@ def _restore_stock(order, voucher_type="POS Return"):
         )
 
 
-def _cancel_kots(order):
+def _cancel_kots(order) -> list[KOT]:
     """Create one cancellation KOT per station and close the source tickets."""
     active_kots = list(
         order.kots.filter(status=SUBMITTED, type=NEW_ORDER)
@@ -1162,7 +1178,7 @@ def _cancel_kots(order):
         return []
     created = []
     # One cancellation sheet per production unit.
-    by_station = {}
+    by_station: dict[int | None, dict[str, Any]] = {}
     for original_kot in active_kots:
         station = by_station.setdefault(
             original_kot.production_unit_id,
@@ -1214,19 +1230,23 @@ def _cancel_kots(order):
     return created
 
 
-def _ticket_type_for_department(department):
-    return TICKET_KITCHEN if department == "FOOD" else TICKET_BAR
+def _ticket_type_for_department(department) -> str:
+    if department == "FOOD":
+        return TICKET_KITCHEN
+    if department == "DRINKS":
+        return TICKET_BAR
+    raise ValidationError(f"Cannot route a ticket for department {department!r}.")
 
 
-def _ticket_prefix_for_type(ticket_type):
+def _ticket_prefix_for_type(ticket_type) -> str:
     return "KOT" if ticket_type == TICKET_KITCHEN else "BOT"
 
 
-def _reservations_initialized(order):
+def _reservations_initialized(order) -> bool:
     return bool(order.stock_warehouse_id) and not order.is_return
 
 
-def _reservation_warehouse(order, *, required):
+def _reservation_warehouse(order, *, required) -> Warehouse | None:
     # The order's stock_warehouse snapshot is pinned at first reservation.
     from apps.settings.models import Restaurant
 
@@ -1245,7 +1265,7 @@ def _reservation_warehouse(order, *, required):
     return order.stock_warehouse or warehouse
 
 
-def _locked_drink_bins(item_ids, warehouse):
+def _locked_drink_bins(item_ids, warehouse) -> dict[int, Bin]:
     # Pre-create bins so select_for_update locks a stable row set.
     item_ids = sorted(set(item_ids))
     existing_ids = set(Bin.objects.filter(item_id__in=item_ids, warehouse=warehouse).values_list("item_id", flat=True))

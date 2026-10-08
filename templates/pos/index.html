@@ -23,11 +23,8 @@
     {% partialdef cart inline %}
     {% include "pos/partials/cart/panel.html" %}
     {% endpartialdef %}
-    {% partialdef payment_dialog %}
-    {% include "pos/partials/payment/dialog.html" %}
-    {% endpartialdef %}
     <div id="payment-dialog-container"></div>
-    <div id="add-on-dialog-container"></div>
+    <div id="catalog-dialog-container"></div>
   </div>
 {% endif %}
 {% if request.htmx %}

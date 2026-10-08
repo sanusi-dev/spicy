@@ -105,7 +105,8 @@ class ItemForm(InventoryModelForm):
             ),
             "has_variants": (
                 "Use variants",
-                "When enabled, this item becomes a template for variants and cannot be stocked, sold, or purchased directly.",
+                "When enabled, this item becomes a template for variants"
+                " and cannot be stocked, sold, or purchased directly.",
             ),
         }
         for field_name, (label, help_text) in checkbox_copy.items():

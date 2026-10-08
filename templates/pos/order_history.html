@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block pos_content %}
 {% partialdef surface inline %}
-<section class="flex h-full flex-col overflow-hidden bg-slate-100" x-data="{ selectedOrder: null }" @order-details-closed.window="selectedOrder = null">
+<section class="flex h-full flex-col overflow-hidden bg-slate-100" x-data="{ selectedOrder: null }" @order-details-closed.window="selectedOrder = null" hx-indicator="#history-indicator">
   <header class="mt-5 shrink-0 px-4 sm:mt-6 sm:px-6">
     <div class="flex w-full flex-wrap items-center justify-between gap-3 border-b border-slate-300 pb-3">
       <nav aria-label="Order status" class="inline-flex items-center gap-0.5 rounded-xl bg-slate-200/60 p-1">
@@ -31,6 +31,9 @@
     </div>
   </header>
   <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-8 sm:px-6 sm:pb-6 sm:pt-10">
+    <div id="history-indicator" class="htmx-indicator flex justify-center py-5 text-teal-700">
+      {% include "pos/partials/components/spinner.html" with spinner_override="h-5 w-5 animate-spin" %}
+    </div>
     <div class="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div class="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-3 sm:px-6">
         {% if status_filter == "sales" %}

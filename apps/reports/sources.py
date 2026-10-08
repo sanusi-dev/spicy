@@ -62,6 +62,30 @@ def round_off(orders):
     return money(sum((o.rounding_adjustment for o in orders), ZERO))
 
 
+def _order_line_departments(sles):
+    """Map voucher_detail_no to the sale-time OrderItem department for POS ledger rows."""
+    line_pks = []
+    for sle in sles:
+        if not sle.voucher_detail_no:
+            continue
+        try:
+            line_pks.append(int(sle.voucher_detail_no))
+        except ValueError, TypeError:
+            continue
+    if not line_pks:
+        return {}
+    departments = OrderItem.objects.filter(pk__in=line_pks).values_list("pk", "department")
+    return {str(pk): department for pk, department in departments}
+
+
+def _is_snapshot_drink_sle(sle, departments):
+    """True when the SLE's order line was DRINKS at sale time."""
+    department = departments.get(sle.voucher_detail_no)
+    if department:
+        return department == DRINKS
+    return False
+
+
 def drink_cogs(orders):
     """Drink COGS total and rows for the window's orders, with wastage relabelling."""
     rows = []
@@ -69,13 +93,17 @@ def drink_cogs(orders):
     sale_orders = {str(o.pk) for o in orders if not o.is_return}
     return_orders = {str(o.pk) for o in orders if o.is_return}
     if sale_orders:
-        sales = StockLedgerEntry.objects.filter(
-            voucher_no__in=sale_orders,
-            voucher_type="POS Order",
-            quantity__lt=0,
-            item__department=DRINKS,
-        ).select_related("item")
+        sales = list(
+            StockLedgerEntry.objects.filter(
+                voucher_no__in=sale_orders,
+                voucher_type="POS Order",
+                quantity__lt=0,
+            ).select_related("item")
+        )
+        departments = _order_line_departments(sales)
         for sle in sales:
+            if not _is_snapshot_drink_sle(sle, departments):
+                continue
             qty = abs(sle.quantity)
             amount = money(abs(sle.stock_value_change))
             total += amount
@@ -89,13 +117,17 @@ def drink_cogs(orders):
                 }
             )
     if return_orders:
-        returns = StockLedgerEntry.objects.filter(
-            voucher_no__in=return_orders,
-            voucher_type="POS Return",
-            quantity__gt=0,
-            item__department=DRINKS,
-        ).select_related("item")
+        returns = list(
+            StockLedgerEntry.objects.filter(
+                voucher_no__in=return_orders,
+                voucher_type="POS Return",
+                quantity__gt=0,
+            ).select_related("item")
+        )
+        departments = _order_line_departments(returns)
         for sle in returns:
+            if not _is_snapshot_drink_sle(sle, departments):
+                continue
             qty = sle.quantity
             amount = money(sle.stock_value_change)
             total -= amount

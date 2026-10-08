@@ -24,7 +24,7 @@ Implementation status lives in `PLAN.md`.
 |---|---|---|
 | 1 | Restaurant settings | The singleton configuration record. Holds company name, invoice prefix, address, active menu, the default (bar/POS) warehouse, and the central store warehouse. It also holds the maximum number of open draft orders, whether cashiers can browse full order history, and whether electronic payments must carry a reference. Every other area of the system references it. |
 | 2 | Production units | One production unit per department: the Kitchen (FOOD) and the Bar (DRINKS). Each unit owns its department's warehouse, printer configuration (IP address, paper width, cut mode), and a flag to suppress ticket printing for takeaway orders. |
-| 3 | Staff roles | Three roles: Admin (everything, including Django admin), Manager (back office + POS), Cashier (POS only). Only admins assign roles. Admins create logins and toggle active status from the User-roles page. |
+| 3 | Staff roles | Three roles: Admin (everything, including Django admin), Manager (back office + POS), Cashier (POS only). Only admins assign roles. Admins create logins and toggle active status from the User-roles page. Self-signup is closed; role assignment rejects unknown role values and blocks self-demotion and the demotion of the last admin. |
 
 ### A2. Menu Management
 
@@ -67,7 +67,7 @@ Implementation status lives in `PLAN.md`.
 |---|---|---|
 | 23 | POS opening entry | Starts the shift: period, cashier, and an opening float per payment mode. At most one cash-type mode may be declared per shift (a single drawer backs change and the close variance). Exactly one shift can be open at a time. |
 | 24 | POS closing entry | Ends the shift with a reconciliation per payment mode: opening float, expected amount, cashier-counted amount, and difference. Only the cashier who opened the shift, or a Manager/Admin, can close it. Aggregates the shift's submitted orders. The closing detail shows frozen shift sales totals (bills, qty, net, grand, refunded). The list shows net sales. |
-| 25 | Shift guards | Closing is blocked while open draft orders exist. A shift with attached orders cannot be cancelled. A closing entry cannot be cancelled once a newer shift is open. |
+| 25 | Shift guards | Closing is blocked while open draft orders exist. Closing also requires the cashier to review and confirm the shift's cancelled-after-send orders on the POS close surface. The Z-report (closing entry) records the count. A shift with attached orders cannot be cancelled. A closing entry cannot be cancelled once a newer shift is open. |
 | 26 | Refund netting | Expected drawer amounts subtract refunds from return orders submitted during the shift, and net off cash change and cash-outs. |
 | 26b | Shift cash-out | Mid-shift cash leaving the drawer (transport, ice, petty repairs): single-step SUBMITTED voucher with manager-only cancel while the shift is open. It reduces the mode's expected drawer amount and posts Dr petty-cash/default expense / Cr the cash mode's account. |
 
@@ -78,7 +78,7 @@ Implementation status lives in `PLAN.md`.
 | 27 | Order document | The central sale record. Fields: invoice number, continuous sequential order number, order type (Dine-In / Take-Away), free-text customer name (default "Walk-in Customer"), guest count, and totals with whole-naira rounding. Statuses: Draft, Submitted, Cancelled, Discarded. |
 | 28 | Order lines | Each line stores item, quantity, rate, amount, per-line comments, the customer card index, and department + stock-tracked snapshots. |
 | 29 | Order payments | Split payment across modes in one order. Cash overpayment produces change. Electronic payment references must be unique, and the restaurant can require them at settlement. Payment rows are immutable once the order is settled. |
-| 30 | Order lifecycle | One exit per stage: unsent drafts are deleted. Sent drafts are cancelled with cancellation tickets. Paid orders are refunded through a return order. Drafts belong to the cashier who created them. Other cashiers cannot see or change them, while managers/admins have full access. A configurable cap limits open drafts per shift. |
+| 30 | Order lifecycle | One exit per stage: unsent drafts are deleted. Sent drafts are cancelled with cancellation tickets. Paid orders are refunded through a return order. Drafts belong to the cashier who created them. Other cashiers cannot see or change them, while managers/admins have full access. The creator may cancel their own sent order with a reason — no second person is required; instead the shift's cancellations are surfaced as a blocking review at close and counted on the Z-report. A configurable cap limits open drafts per shift. |
 | 31 | Kitchen & bar tickets | On send, the system creates one ticket per department: FOOD to the kitchen unit, DRINKS to the bar unit. Tickets are snapshots (New Order or Cancelled), numbered KOT-/BOT- (CNCL- for cancellations), with per-ticket print status and retry. Takeaway suppression is per production unit. |
 | 32 | Settlement ticket guarantee | Settling an order that never generated tickets creates them automatically, so no paid order escapes the kitchen. |
 | 33 | Returns | A manager creates a return draft mirroring the paid order with negative lines. Submitting it restores drink stock, records negative refund payment rows, and reduces shift-close expectations. One active return per order. |
@@ -119,7 +119,7 @@ Implementation status lives in `PLAN.md`.
 
 | # | Feature | What it does |
 |---|---|---|
-| 39 | Login & routing | Cashier logs in with username/password (show/hide toggle). The session persists until logout or timeout. Users land on POS or back office per role. |
+| 39 | Login & routing | Cashier logs in with username/password (show/hide toggle). The session persists until logout or timeout. Users land on POS or back office per role. No self-signup: logins are created by an admin in the back office. |
 | 40 | Shift gate | The POS refuses to serve orders until a shift is open and shows the open-shift form inline. |
 | 41 | Draft orders home | Lists the shift's open drafts in Draft/Sent tabs with item previews and the draft cap. Orders resume from here. |
 | 42 | Menu catalog | Responsive grid of menu cards (image/initials, name, price) with category sidebar, special filter, and live search. A single click adds to the cart. The product dialog handles quantity, per-line comments, and add-ons. |

@@ -382,3 +382,61 @@ class StockEntryUOMFormTest(UOMConversionTestBase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "5 Crate = 120 Bottle")
+
+
+class ItemUOMConversionPostUseGuardTest(UOMConversionTestBase):
+    """Conversion edits and deletes lock once the row has priced past a stock document."""
+
+    def test_edit_blocked_once_postings_reach_its_lifespan(self):
+        conversion = self._conversion()
+        StockLedgerEntry.create_entry(
+            self.drink,
+            self.store,
+            Decimal("24"),
+            "Purchase Receipt",
+            "PS-1",
+            unit_rate=Decimal("500"),
+        )
+        conversion.conversion_factor = Decimal("30")
+        with self.assertRaisesMessage(ValidationError, "already priced past"):
+            conversion.save(update_fields=["conversion_factor", "updated_at"])
+
+    def test_delete_blocked_once_postings_reach_its_lifespan(self):
+        conversion = self._conversion()
+        StockLedgerEntry.create_entry(
+            self.drink,
+            self.store,
+            Decimal("24"),
+            "Purchase Receipt",
+            "PS-2",
+            unit_rate=Decimal("500"),
+        )
+        with self.assertRaisesMessage(ValidationError, "cannot be deleted"):
+            conversion.delete()
+
+    def test_edit_allowed_when_no_postings_after_the_row(self):
+        StockLedgerEntry.create_entry(
+            self.drink,
+            self.store,
+            Decimal("24"),
+            "Purchase Receipt",
+            "PS-3",
+            unit_rate=Decimal("500"),
+        )
+        conversion = self._conversion()
+        conversion.conversion_factor = Decimal("12")
+        conversion.save(update_fields=["conversion_factor", "updated_at"])
+        self.assertEqual(ItemUOMConversion.objects.get(pk=conversion.pk).conversion_factor, Decimal("12"))
+
+    def test_delete_allowed_when_no_postings_after_the_row(self):
+        StockLedgerEntry.create_entry(
+            self.drink,
+            self.store,
+            Decimal("24"),
+            "Purchase Receipt",
+            "PS-4",
+            unit_rate=Decimal("500"),
+        )
+        conversion = self._conversion()
+        conversion.delete()
+        self.assertFalse(ItemUOMConversion.objects.filter(pk=conversion.pk).exists())

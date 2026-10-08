@@ -23,6 +23,8 @@ from .models import (
 
 SPICY_GROUP_NAMES = ["Spicy Admin", "Spicy Manager", "Spicy Cashier"]
 
+ROLE_LABELS = {"admin": "an Admin", "manager": "a Manager", "cashier": "a Cashier"}
+
 
 class _HtmxRequest(HttpRequest):
     htmx: HtmxDetails
@@ -89,18 +91,36 @@ def staff_list(request: HttpRequest) -> HttpResponse:
     return render(request, "backoffice/settings/staff_list.html", context)
 
 
+def _other_admin_exists(user: CustomUser) -> bool:
+    return (
+        CustomUser.objects.exclude(pk=user.pk)
+        .filter(models.Q(is_superuser=True) | models.Q(groups__name="Spicy Admin"))
+        .exists()
+    )
+
+
+def _role_change_error(request: HttpRequest, user: CustomUser, role: str) -> str | None:
+    """Return the guard message blocking a role change, or None when allowed."""
+    if role not in ROLE_LABELS:
+        return "Unknown role. Use admin, manager or cashier."
+    if role != "admin":
+        if user.pk == request.user.pk:
+            return "You cannot change your own role."
+        if user.is_admin and not _other_admin_exists(user):
+            return "Cannot demote the last Admin. Promote another Admin first."
+    return None
+
+
 @admin_required
 @require_POST
 def staff_assign_role(request: HttpRequest, pk: int, role: str) -> HttpResponse:
     user = get_object_or_404(CustomUser, pk=pk)
-    _apply_role(user, role)
-
-    if role == "admin":
-        messages.success(request, f"{user.get_display_name()} is now an Admin.")
-    elif role == "manager":
-        messages.success(request, f"{user.get_display_name()} is now a Manager.")
-    elif role == "cashier":
-        messages.success(request, f"{user.get_display_name()} is now a Cashier.")
+    error = _role_change_error(request, user, role)
+    if error is not None:
+        messages.error(request, error)
+    else:
+        _apply_role(user, role)
+        messages.success(request, f"{user.get_display_name()} is now {ROLE_LABELS[role]}.")
 
     if _is_htmx(request) and request.htmx.target == f"staff-row-{pk}":
         return render(request, "backoffice/settings/staff_list.html#staff-row", {"entry": _build_staff_entry(user)})
@@ -109,6 +129,9 @@ def staff_assign_role(request: HttpRequest, pk: int, role: str) -> HttpResponse:
 
 def _apply_role(user: CustomUser, role: str) -> None:
     """Apply one Spicy role: exactly one group plus the matching flags."""
+    if role not in ROLE_LABELS:
+        raise ValueError(f"Unknown role: {role!r}")
+
     groups = _ensure_spicy_groups()
     admin_group = groups["Spicy Admin"]
     manager_group = groups["Spicy Manager"]

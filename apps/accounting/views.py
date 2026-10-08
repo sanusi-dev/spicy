@@ -9,6 +9,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from apps.reports import report_filters
 from apps.users.decorators import manager_required
 from apps.utils.csv_export import export_filename, money_text, over_row_cap, stream_csv, text
 from apps.utils.forms import add_formset_row, remove_formset_row
@@ -247,17 +248,18 @@ def journal_entry_amend(request: HttpRequest, pk: int) -> HttpResponse:
 @manager_required
 def gl_entry_list(request: HttpRequest) -> HttpResponse:
     qs = GLEntry.objects.select_related("account", "fiscal_year").order_by("-posting_date", "-pk")
-    account_id = request.GET.get("account")
+    account_filter = request.GET.get("account") or ""
+    account_id = report_filters.int_param(request, "account")
     voucher_type = request.GET.get("voucher_type")
     include_cancelled = request.GET.get("include_cancelled") == "1"
     if account_id:
-        qs = qs.filter(account_id=int(account_id))
+        qs = qs.filter(account_id=account_id)
     if voucher_type:
         qs = qs.filter(voucher_type=voucher_type)
     if not include_cancelled:
         qs = qs.filter(is_cancelled=False)
     if request.GET.get("export") == "csv":
-        return _gl_entry_list_csv(qs, account_id, voucher_type, include_cancelled)
+        return _gl_entry_list_csv(qs, account_filter, voucher_type, include_cancelled)
     return render(
         request,
         "backoffice/accounting/gl_entry_list.html",
@@ -265,7 +267,7 @@ def gl_entry_list(request: HttpRequest) -> HttpResponse:
             "entries": qs,
             "accounts": LedgerAccount.objects.filter(is_group=False).order_by("name"),
             "voucher_types": GLEntry.objects.values_list("voucher_type", flat=True).distinct().order_by(),
-            "account_id": account_id,
+            "account_id": account_filter,
             "voucher_type": voucher_type,
             "include_cancelled": include_cancelled,
         },

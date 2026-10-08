@@ -48,6 +48,16 @@ This will:
 - Run your database migrations
 - Install front end dependencies
 
+`make init` copies `.env.example` to `.env`. The template's `SECRET_KEY` is a development-only placeholder. For any install past local experiments, generate a real key and set your environment deliberately:
+
+```bash
+uv run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+- `SECRET_KEY` — required. The app refuses to start when the variable is missing.
+- `DEBUG` — off by default. Set `DEBUG=True` for development error pages and Vite HMR assets.
+- `ALLOWED_HOSTS` — defaults to `localhost,127.0.0.1`. Add the desktop's LAN IP so WiFi devices can open the back office.
+
 Then you can start the app:
 
 ```bash
