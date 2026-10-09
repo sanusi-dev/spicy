@@ -165,7 +165,7 @@
     <span>Quick Access</span>
   </li>
   <li>
-    <a href="{% url 'web:pos_index' %}" class="group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-100 {% if '/pos' in request.path %}bg-orange-50 text-orange-600 shadow-sm shadow-orange-500/10{% else %}text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm{% endif %}">
+    <a href="{% url 'pos:pos_home' %}" class="group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-100 {% if '/pos' in request.path %}bg-orange-50 text-orange-600 shadow-sm shadow-orange-500/10{% else %}text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm{% endif %}">
       <span class="shrink-0 transition-transform group-hover:scale-110">{% hgi_stroke name="dashboard-square-01" size="20" color="currentColor" stroke_width="2" %}</span>
       Launch POS
     </a>
